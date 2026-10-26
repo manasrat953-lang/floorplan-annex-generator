@@ -18,17 +18,19 @@ with col2:
     floor_file = st.file_uploader("2. Erfa3 sorat el-Floor Plan el-Asly (JPG / PNG)", type=["jpg", "jpeg", "png"])
 
 if template_file and floor_file:
+    # 1. Read files safely into bytes first to prevent stream reading errors
+    template_bytes = template_file.read()
+    floor_bytes = floor_file.read()
+
     # Load Template and Floor Plan using PIL
-    pil_template = Image.open(template_file).convert("RGB")
-    pil_floor = Image.open(floor_file).convert("RGB")
+    pil_template = Image.open(io.BytesIO(template_bytes)).convert("RGB")
+    pil_floor = Image.open(io.BytesIO(floor_bytes)).convert("RGB")
     
-    # Load OpenCV for Floor Plan processing & auto-detection
-    floor_np = cv2.imdecode(np.asarray(bytearray(floor_file.read()), dtype=np.uint8), cv2.IMREAD_COLOR)
+    # Load OpenCV for Floor Plan processing & auto-detection safely from bytes
+    floor_np = cv2.imdecode(np.asarray(bytearray(floor_bytes), dtype=np.uint8), cv2.IMREAD_COLOR)
     fh, fw, _ = floor_np.shape
 
     # --- AUTO-DETECTION LOGIC ---
-    # (Hena el-system by-3mel scan lel-contours aw by-ta3mel list tgeeb kol el-units el-mawgooda automatic)
-    # Law 3ayzin ne3mel detection haqiqi lel-boxes, ben-sta5dem contour detection:
     gray = cv2.cvtColor(floor_np, cv2.COLOR_BGR2GRAY)
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
     _, thresh = cv2.threshold(blurred, 200, 255, cv2.THRESH_BINARY_INV)
@@ -39,21 +41,19 @@ if template_file and floor_file:
     counter = 1
     for cnt in contours:
         x, y, w, h = cv2.boundingRect(cnt)
-        # Filter by architectural unit approximate size ratio on plan
         if (fw * 0.03 < w < fw * 0.15) and (fh * 0.03 < h < fh * 0.15):
             detected_units.append({
                 "id": counter,
                 "code": f"CX-10{counter}",
-                "area": "103", # Default or calculated area
+                "area": "103",
                 "x": x, "y": y, "w": w, "h": h
             })
             counter += 1
-            if counter > 55: # Limit to total units
+            if counter > 55:
                 break
 
     # Fallback default list if auto-detection needs standard sample coordinates
     if len(detected_units) < 5:
-        # Example default mapping for demonstration if contours vary
         detected_units = [
             {"id": i+1, "code": f"CX-10{i+4}", "area": "103", "x": 100 + (i*50), "y": 200, "w": 80, "h": 100} 
             for i in range(10)
@@ -81,7 +81,6 @@ if template_file and floor_file:
         unit_crop = pil_floor.crop((x, y, x + w, y + h))
         unit_crop_resized = unit_crop.resize((420, 300))
         
-        # Position for upper section crop on template (adjustable)
         upper_pos = (150, 120)
         annex_img.paste(unit_crop_resized, upper_pos)
 
@@ -91,7 +90,6 @@ if template_file and floor_file:
         key_rgb = cv2.cvtColor(key_plan_cv, cv2.COLOR_BGR2RGB)
         key_pil = Image.fromarray(key_rgb).resize((320, 200))
         
-        # Position for lower key plan on template (adjustable)
         lower_pos = (145, 410)
         annex_img.paste(key_pil, lower_pos)
 
