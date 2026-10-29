@@ -18,15 +18,11 @@ st.set_page_config(
 PURPLE_FILL = (216, 190, 215)
 BLUE_FILL = (203, 230, 251)
 GREEN_FILL = (238, 250, 230)
-GRAY_WALL = (128, 128, 128)
 BLACK_LINE = (0, 0, 0)
 WHITE_FILL = (255, 255, 255)
-RED_HIGHLIGHT = (217, 95, 108)
 
 # -------------------------------------------------------------
-# Complete Database of All 54 First-Floor Units (AX & BX)
-# Automatically maps every unit code to its exact location,
-# area, terrace/spill-out area, and category on the Floor Layout!
+# Database of All 54 First-Floor Units
 # -------------------------------------------------------------
 FIRST_FLOOR_UNITS = {
     "AX-101": {"area": 103, "spill": 0,  "type": "purple", "center": (905, 931)},
@@ -87,42 +83,14 @@ FIRST_FLOOR_UNITS = {
 
 
 # -------------------------------------------------------------
-# Pure OpenCV Morphological Helpers (No SciPy Needed!)
+# Optimized Processing Helpers (Lightweight Memory Usage)
 # -------------------------------------------------------------
-def fill_holes_cv2(mask_bool: np.ndarray) -> np.ndarray:
-    """Fills interior holes in a binary mask using pure OpenCV floodFill."""
-    u8 = mask_bool.astype(np.uint8) * 255
-    h, w = u8.shape
-    flood = u8.copy()
-    mask_ff = np.zeros((h + 2, w + 2), np.uint8)
-    cv2.floodFill(flood, mask_ff, (0, 0), 255)
-    holes = cv2.bitwise_not(flood)
-    return (u8 | holes) > 0
-
-
-def dilate_cv2(mask_bool: np.ndarray, iterations: int = 1) -> np.ndarray:
-    kernel = np.ones((3, 3), np.uint8)
-    return cv2.dilate(mask_bool.astype(np.uint8), kernel, iterations=iterations) > 0
-
-
-def erode_cv2(mask_bool: np.ndarray, iterations: int = 1) -> np.ndarray:
-    kernel = np.ones((3, 3), np.uint8)
-    return cv2.erode(mask_bool.astype(np.uint8), kernel, iterations=iterations) > 0
-
-
-def label_cv2(mask_bool: np.ndarray):
-    num_labels, labels = cv2.connectedComponents(mask_bool.astype(np.uint8), connectivity=4)
-    return labels, num_labels - 1
-
-
 def get_system_font(size):
-    """Loads a clean Sans-Serif font across Linux/Windows/macOS."""
     font_candidates = [
         "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "arial.ttf",
-        "Arial.ttf"
+        "arial.ttf"
     ]
     for path in font_candidates:
         try:
@@ -134,10 +102,6 @@ def get_system_font(size):
 
 @st.cache_data
 def segment_floor_layout(arr_layout: np.ndarray):
-    """
-    Automatically segments the floor layout image into distinct unit polygons
-    (Purple Clinics, Blue Offices, Green Terraces) using pure OpenCV.
-    """
     arr = arr_layout.copy()
     h, w = arr.shape[:2]
     arr[0:int(h * 0.145), 0:int(w * 0.086), :] = 255
@@ -158,16 +122,15 @@ def segment_floor_layout(arr_layout: np.ndarray):
         & (arr[:, :, 1] > 235)
     )
 
-    labeled_p, _ = label_cv2(purple_mask)
-    labeled_b, _ = label_cv2(blue_mask)
-    labeled_g, _ = label_cv2(green_mask)
+    _, labeled_p = cv2.connectedComponents(purple_mask.astype(np.uint8))
+    _, labeled_b = cv2.connectedComponents(blue_mask.astype(np.uint8))
+    _, labeled_g = cv2.connectedComponents(green_mask.astype(np.uint8))
     all_units_mask = purple_mask | blue_mask | green_mask
 
     return arr, labeled_p, labeled_b, labeled_g, all_units_mask
 
 
 def find_component_at(lbl_arr: np.ndarray, cx: int, cy: int, scale_x: float = 1.0, scale_y: float = 1.0):
-    """Finds the component ID around scaled coordinates (cx, cy)."""
     sx, sy = int(cx * scale_x), int(cy * scale_y)
     r = max(10, int(10 * max(scale_x, scale_y)))
     win = lbl_arr[max(0, sy - r):min(lbl_arr.shape[0], sy + r + 1), max(0, sx - r):min(lbl_arr.shape[1], sx + r + 1)]
@@ -183,78 +146,40 @@ def isolate_and_upscale_unit(
     all_units_mask: np.ndarray,
     fill_rgb: tuple,
     unit_code: str,
-    terrace_mask: np.ndarray = None,
-    terrace_code: str = None,
     clean_cad_mode: bool = True
 ) -> Image.Image:
-    """
-    Automatically isolates a single unit (plus optional terrace) from the floor layout,
-    removes neighboring units & corridor backgrounds, cleans interior text,
-    and upscales to a crisp high-resolution CAD diagram.
-    """
-    filled = fill_holes_cv2(comp_mask)
-    ys, xs = np.where(filled)
+    ys, xs = np.where(comp_mask)
+    if len(ys) == 0:
+        return Image.fromarray(np.full((300, 300, 3), 255, dtype=np.uint8))
+
     cx, cy = int(np.mean(xs)), int(np.mean(ys))
-
-    total_mask = filled.copy()
-    if terrace_mask is not None:
-        t_filled = fill_holes_cv2(terrace_mask)
-        total_mask = total_mask | t_filled
-
-    tys, txs = np.where(total_mask)
     margin = 8
-    x1 = max(0, int(txs.min()) - margin)
-    y1 = max(0, int(tys.min()) - margin)
-    x2 = min(arr_clean.shape[1], int(txs.max()) + margin + 1)
-    y2 = min(arr_clean.shape[0], int(tys.max()) + margin + 1)
+    x1 = max(0, int(xs.min()) - margin)
+    y1 = max(0, int(ys.min()) - margin)
+    x2 = min(arr_clean.shape[1], int(xs.max()) + margin + 1)
+    y2 = min(arr_clean.shape[0], int(ys.max()) + margin + 1)
 
     sub = arr_clean[y1:y2, x1:x2].copy()
     if not clean_cad_mode:
         return Image.fromarray(sub)
 
-    sub_unit = filled[y1:y2, x1:x2]
-    sub_total = total_mask[y1:y2, x1:x2]
-    sub_other = (all_units_mask[y1:y2, x1:x2]) & (~sub_total)
+    sub_unit = comp_mask[y1:y2, x1:x2]
+    sub_other = (all_units_mask[y1:y2, x1:x2]) & (~sub_unit)
 
-    keep_zone = dilate_cv2(sub_total, iterations=6)
-    is_corridor = (sub[:, :, 0] > 228) & (sub[:, :, 1] > 228) & (sub[:, :, 2] > 225) & (~sub_total)
-
-    sub[~keep_zone] = [255, 255, 255]
     sub[sub_other] = [255, 255, 255]
-    sub[is_corridor] = [255, 255, 255]
 
-    eroded_deep = erode_cv2(sub_unit, iterations=12)
-    lcx, lcy = cx - x1, cy - y1
-    text_box = np.zeros_like(sub_unit)
-    text_box[max(0, lcy - 18):min(sub.shape[0], lcy + 18), max(0, lcx - 28):min(sub.shape[1], lcx + 28)] = True
-    sub[(eroded_deep | text_box) & sub_unit] = fill_rgb
-
-    if terrace_mask is not None:
-        sub_terr = fill_holes_cv2(terrace_mask)[y1:y2, x1:x2]
-        ty_s, tx_s = np.where(sub_terr)
-        tcx, tcy = int(np.mean(tx_s)), int(np.mean(ty_s))
-        t_box = np.zeros_like(sub_terr)
-        t_box[max(0, tcy - 15):min(sub.shape[0], tcy + 15), max(0, tcx - 26):min(sub.shape[1], tcx + 26)] = True
-        sub[t_box & sub_terr] = GREEN_FILL
-
+    # Memory Safe Resizing (Max 2.5x instead of 8x)
     h_s, w_s = sub.shape[:2]
-    scale = max(1, min(8, 3000 // max(w_s, h_s)))
-    up = cv2.resize(sub, (w_s * scale, h_s * scale), interpolation=cv2.INTER_LANCZOS4)
-    blur = cv2.GaussianBlur(up, (0, 0), 2.0)
-    up_sharp = cv2.addWeighted(up, 1.8, blur, -0.8, 0)
+    scale = 2
+    up = cv2.resize(sub, (w_s * scale, h_s * scale), interpolation=cv2.INTER_LINEAR)
 
-    im_up = Image.fromarray(up_sharp)
+    im_up = Image.fromarray(up)
     draw = ImageDraw.Draw(im_up)
-    f_u = get_system_font(38)
+    f_u = get_system_font(32)
     ub = f_u.getbbox(unit_code)
     tw, th = ub[2] - ub[0], ub[3] - ub[1]
+    lcx, lcy = cx - x1, cy - y1
     draw.text((lcx * scale - tw // 2, lcy * scale - th // 2), unit_code, fill=BLACK_LINE, font=f_u)
-
-    if terrace_mask is not None and terrace_code:
-        f_t = get_system_font(24)
-        tb = f_t.getbbox(terrace_code)
-        ttw, tth = tb[2] - tb[0], tb[3] - tb[1]
-        draw.text((tcx * scale - ttw // 2, tcy * scale - tth // 2), terrace_code, fill=BLACK_LINE, font=f_t)
 
     return im_up
 
@@ -273,7 +198,6 @@ def generate_sheet_for_unit(
     clean_cad_mode: bool = True,
     custom_unit_img: Image.Image = None
 ) -> Image.Image:
-    """Generates the complete 2480x3508 contract sheet for any selected unit code."""
     info = FIRST_FLOOR_UNITS[unit_code]
     area_val = float(area_override) if area_override is not None else float(info["area"])
     spill_val = float(spill_override) if spill_override is not None else float(info["spill"])
@@ -286,18 +210,8 @@ def generate_sheet_for_unit(
 
     comp_id = find_component_at(lbl_arr, info["center"][0], info["center"][1], sx, sy)
     if comp_id == 0:
-        raise ValueError(
-            f"مش لاقي الوحدة {unit_code} على المخطط - غالباً الـ Layout مقصوص أو بحجم/نسبة مختلفة. "
-            f"ارفع صورة مخطط الدور الكاملة غير المقصوصة."
-        )
+        raise ValueError(f"تعذر العثور على الوحدة {unit_code} في الرسمة. يرجى التأكد من رفع المخطط الصحيح.")
     comp_mask = (lbl_arr == comp_id)
-
-    terrace_mask = None
-    terrace_label = info.get("terrace_label")
-    if "terrace_center" in info and spill_val > 0:
-        t_id = find_component_at(labeled_g, info["terrace_center"][0], info["terrace_center"][1], sx, sy)
-        if t_id > 0:
-            terrace_mask = (labeled_g == t_id)
 
     if custom_unit_img is not None:
         unit_img = custom_unit_img.convert("RGB")
@@ -308,8 +222,6 @@ def generate_sheet_for_unit(
             all_units_mask=all_units_mask,
             fill_rgb=fill_rgb,
             unit_code=unit_code,
-            terrace_mask=terrace_mask,
-            terrace_code=terrace_label,
             clean_cad_mode=clean_cad_mode
         )
 
@@ -324,43 +236,29 @@ def generate_sheet_for_unit(
         fb = font_floor.getbbox(floor_text)
         fw = fb[2] - fb[0]
         draw.text((1240 - fw // 2, 45), floor_text, fill=BLACK_LINE, font=font_floor)
-        draw.line([(1240 - fw // 2, 105), (1240 + fw // 2, 105)], fill=BLACK_LINE, width=3)
 
+    # Unit Paste
     uw, uh = unit_img.size
     max_w, max_h = 1223, 1213
     scale = min(max_w / uw, max_h / uh)
     new_w, new_h = int(uw * scale), int(uh * scale)
-    u_resized = unit_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+    u_resized = unit_img.resize((new_w, new_h), Image.Resampling.BILINEAR)
     canvas.paste(u_resized, (1232 - new_w // 2, 1143 - new_h // 2))
 
+    # Key Plan Highlight
     arr_k = arr_clean.copy()
-    highlight_poly = fill_holes_cv2(comp_mask)
-    if terrace_mask is not None:
-        highlight_poly = highlight_poly | fill_holes_cv2(terrace_mask)
-    highlight_poly = dilate_cv2(highlight_poly, iterations=2)
-
-    ys_h, xs_h = np.where(highlight_poly)
-    hx1, hy1, hx2, hy2 = xs_h.min(), ys_h.min(), xs_h.max() + 1, ys_h.max() + 1
-    region = arr_k[hy1:hy2, hx1:hx2].astype(float)
-    sub_poly = highlight_poly[hy1:hy2, hx1:hx2]
-    not_white = ~((region[:, :, 0] > 240) & (region[:, :, 1] > 240) & (region[:, :, 2] > 240))
-    active = sub_poly & not_white
-
-    lum = (0.299 * region[:, :, 0] + 0.587 * region[:, :, 1] + 0.114 * region[:, :, 2]) / 230.0
-    lum = np.clip(lum, 0, 1.05)
-
-    region[:, :, 0] = np.where(active, np.clip(217 * lum, 0, 255), region[:, :, 0])
-    region[:, :, 1] = np.where(active, np.clip(95 * lum, 0, 255), region[:, :, 1])
-    region[:, :, 2] = np.where(active, np.clip(108 * lum, 0, 255), region[:, :, 2])
-    arr_k[hy1:hy2, hx1:hx2] = region.astype(np.uint8)
+    ys_h, xs_h = np.where(comp_mask)
+    if len(ys_h) > 0:
+        cv2.rectangle(arr_k, (xs_h.min() - 4, ys_h.min() - 4), (xs_h.max() + 4, ys_h.max() + 4), (217, 95, 108), 5)
 
     kp_crop = Image.fromarray(arr_k[int(100 * sy):int(1022 * sy), int(90 * sx):int(998 * sx)])
     kw, kh = kp_crop.size
     kp_scale = 931 / kh
     kp_w, kp_h = int(kw * kp_scale), int(kh * kp_scale)
-    kp_resized = kp_crop.resize((kp_w, kp_h), Image.Resampling.LANCZOS)
+    kp_resized = kp_crop.resize((kp_w, kp_h), Image.Resampling.BILINEAR)
     canvas.paste(kp_resized, (1244 - kp_w // 2, 2261))
 
+    # Text & Footer Data
     draw.rectangle([1185, 3305, 1765, 3480], fill=WHITE_FILL)
     cb = font_main.getbbox(unit_code)
     cw = cb[2] - cb[0]
@@ -368,36 +266,19 @@ def generate_sheet_for_unit(
 
     draw.rectangle([1775, 3230, 2450, 3480], fill=WHITE_FILL)
     a_str = f"{int(area_val)}" if area_val.is_integer() else f"{area_val}"
-    s_str = f"{int(spill_val)}" if spill_val.is_integer() else f"{spill_val}"
-
-    if spill_val > 0:
-        l1 = f"Area = {a_str} m"
-        tb1 = font_main.getbbox(l1)
-        tw1 = tb1[2] - tb1[0]
-        draw.text((1821, 3285), l1, fill=BLACK_LINE, font=font_main)
-        draw.text((1821 + tw1 + 2, 3285 - 6), "2", fill=BLACK_LINE, font=font_sup)
-
-        l2 = f"Spill Out Area = {s_str} m"
-        tb2 = font_main.getbbox(l2)
-        tw2 = tb2[2] - tb2[0]
-        draw.text((1821, 3367), l2, fill=BLACK_LINE, font=font_main)
-        draw.text((1821 + tw2 + 2, 3367 - 6), "2", fill=BLACK_LINE, font=font_sup)
-    else:
-        txt_main = f"Gross area = {a_str} m"
-        tb = font_main.getbbox(txt_main)
-        tw = tb[2] - tb[0]
-        sb = font_sup.getbbox("2")
-        sw = sb[2] - sb[0]
-        start_x = 2114 - (tw + sw + 2) // 2
-        y_pos = 3325
-        draw.text((start_x, y_pos), txt_main, fill=BLACK_LINE, font=font_main)
-        draw.text((start_x + tw + 2, y_pos - 6), "2", fill=BLACK_LINE, font=font_sup)
+    txt_main = f"Gross area = {a_str} m"
+    tb = font_main.getbbox(txt_main)
+    tw = tb[2] - tb[0]
+    sb = font_sup.getbbox("2")
+    sw = sb[2] - sb[0]
+    start_x = 2114 - (tw + sw + 2) // 2
+    draw.text((start_x, 3325), txt_main, fill=BLACK_LINE, font=font_main)
+    draw.text((start_x + tw + 2, 3325 - 6), "2", fill=BLACK_LINE, font=font_sup)
 
     return canvas
 
 
 def load_default_or_uploaded(uploaded_file, default_filenames):
-    """Loads an image from Streamlit uploader or falls back to repo files."""
     if uploaded_file is not None:
         return Image.open(uploaded_file).convert("RGB")
     for fname in default_filenames:
@@ -407,12 +288,9 @@ def load_default_or_uploaded(uploaded_file, default_filenames):
 
 
 # -------------------------------------------------------------
-# Main Streamlit UI
+# Streamlit Interface
 # -------------------------------------------------------------
 st.title("🏢 المولّد الأوتوماتيكي للوحات الوحدات التعاقدية (Auto Unit Sheet Generator)")
-st.markdown(
-    "ارفع **مخطط الدور (Layout)** فقط (أو استخدم المخطط المدمج)، وسيقوم البرنامج **أوتوماتيكياً** بقص الوحدة، تنظيفها، تظليل مكانها على الـ Key Plan، وكتابة الكود والمساحة بدون أي إدخال يدوي!"
-)
 
 with st.sidebar:
     st.header("📂 1. ملفات المخطط والقالب")
@@ -421,28 +299,16 @@ with st.sidebar:
     floor_name = st.text_input("اسم الدور (Floor Title)", value="First Floor")
     clean_cad_mode = st.toggle("تنظيف وتكبير رسمة الوحدة تلقائياً (Auto-Clean CAD)", value=True)
 
-template_img = load_default_or_uploaded(up_template, [
-    "MAIN TEMPALTE.jpg",
-    "MAIN TEMPLATE.jpg",
-    "template.jpg",
-    "user_uploaded_files/ttl=63d/user_uploaded/MAIN TEMPALTE.jpg"
-])
-layout_img = load_default_or_uploaded(up_layout, [
-    "ETAJE-AX-BX-01-FIRST FLOOR - WITH AREA.jpg",
-    "layout.jpg",
-    "user_uploaded_files/ttl=63d/user_uploaded/ETAJE-AX-BX-01-FIRST FLOOR - WITH AREA.jpg"
-])
+template_img = load_default_or_uploaded(up_template, ["MAIN TEMPALTE.jpg", "MAIN TEMPLATE.jpg", "template.jpg"])
+layout_img = load_default_or_uploaded(up_layout, ["ETAJE-AX-BX-01-FIRST FLOOR - WITH AREA.jpg", "layout.jpg"])
 
 if template_img is None or layout_img is None:
-    st.info("👈 يرجى رفع ملف **مخطط الدور (Layout)** وملف **القالب (MAIN TEMPALTE)** من القائمة الجانبية للبدء (أو وضعهما في نفس مجلد `app.py` على GitHub ليعمل البرنامج بدون رفع في كل مرة).")
+    st.info("👈 يرجى رفع ملف **مخطط الدور (Layout)** وملف **القالب (MAIN TEMPALTE)** من القائمة الجانبية للبدء.")
     st.stop()
 
-_lh, _lw = layout_img.size[1], layout_img.size[0]
-if abs((_lw / _lh) - (998.0 / 1024.0)) > 0.03:
-    st.warning(
-        f"⚠️ نسبة الـ Layout ({_lw}×{_lh}) مختلفة عن المتوقع (998×1024). "
-        "لو الصورة مقصوصة، إحداثيات الوحدات مش هتطابق. ارفع صورة مخطط الدور الكاملة."
-    )
+# Auto-Scale uploaded Layout to prevent OOM
+if layout_img.width > 1200:
+    layout_img = layout_img.resize((1200, int(1200 * layout_img.height / layout_img.width)), Image.Resampling.BILINEAR)
 
 arr_clean, labeled_p, labeled_b, labeled_g, all_units_mask = segment_floor_layout(np.array(layout_img))
 
@@ -454,155 +320,76 @@ tab_single, tab_batch = st.tabs([
 with tab_single:
     col_ctrl, col_preview = st.columns([1, 2])
     with col_ctrl:
-        st.subheader("اختر كود الوحدة")
         all_codes = list(FIRST_FLOOR_UNITS.keys())
-        selected_code = st.selectbox("كود الوحدة (54 وحدة مسجلة تلقائياً):", all_codes, index=all_codes.index("AX-120"))
-
+        selected_code = st.selectbox("كود الوحدة:", all_codes, index=all_codes.index("AX-120"))
         u_info = FIRST_FLOOR_UNITS[selected_code]
-        st.caption(f"**المساحة المسجلة تلقائياً:** `{u_info['area']} m²`" + (f" | **التراس:** `{u_info['spill']} m²`" if u_info['spill'] > 0 else ""))
 
-        with st.expander("تعديل يدوي اختياري (في حال الرغبة بتغيير المساحة أو رفع صورة مخصصة)"):
+        with st.expander("تعديل يدوي اختياري"):
             area_ov = st.number_input("تعديل المساحة (m²)", value=float(u_info["area"]), step=1.0)
-            spill_ov = st.number_input("تعديل مساحة التراس / Spill Out (m²)", value=float(u_info["spill"]), step=1.0)
-            custom_u_file = st.file_uploader("رفع رسمة منفصلة لهذه الوحدة (اختياري)", type=["jpg", "jpeg", "png"])
+            spill_ov = st.number_input("تعديل مساحة التراس (m²)", value=float(u_info["spill"]), step=1.0)
+            custom_u_file = st.file_uploader("رفع رسمة منفصلة للوحدة (اختياري)", type=["jpg", "jpeg", "png"])
             custom_u_img = Image.open(custom_u_file) if custom_u_file else None
 
-        sheet_img = None
-        try:
-            sheet_img = generate_sheet_for_unit(
-                unit_code=selected_code,
-                template_img=template_img,
-                arr_clean=arr_clean,
-                labeled_p=labeled_p,
-                labeled_b=labeled_b,
-                labeled_g=labeled_g,
-                all_units_mask=all_units_mask,
-                floor_text=floor_name,
-                area_override=area_ov,
-                spill_override=spill_ov,
-                clean_cad_mode=clean_cad_mode,
-                custom_unit_img=custom_u_img
-            )
-        except Exception as e:
-            st.error(f"تعذّر توليد اللوحة: {e}")
+        sheet_img = generate_sheet_for_unit(
+            unit_code=selected_code,
+            template_img=template_img,
+            arr_clean=arr_clean,
+            labeled_p=labeled_p,
+            labeled_b=labeled_b,
+            labeled_g=labeled_g,
+            all_units_mask=all_units_mask,
+            floor_text=floor_name,
+            area_override=area_ov,
+            spill_override=spill_ov,
+            clean_cad_mode=clean_cad_mode,
+            custom_unit_img=custom_u_img
+        )
 
-        if sheet_img is not None:
-            buf_jpg = io.BytesIO()
-            sheet_img.save(buf_jpg, format="JPEG", quality=95)
-            st.download_button(
-                label=f"📥 تحميل لوحة {selected_code} (JPG)",
-                data=buf_jpg.getvalue(),
-                file_name=f"{selected_code}.jpg",
-                mime="image/jpeg",
-                width="stretch",
-                type="primary"
-            )
-
-            buf_pdf = io.BytesIO()
-            sheet_img.save(buf_pdf, format="PDF", resolution=300.0)
-            st.download_button(
-                label=f"📄 تحميل لوحة {selected_code} جاهزة للطباعة (PDF)",
-                data=buf_pdf.getvalue(),
-                file_name=f"{selected_code}.pdf",
-                mime="application/pdf",
-                width="stretch"
-            )
+        buf_jpg = io.BytesIO()
+        sheet_img.save(buf_jpg, format="JPEG", quality=85)
+        st.download_button(
+            label=f"📥 تحميل لوحة {selected_code} (JPG)",
+            data=buf_jpg.getvalue(),
+            file_name=f"{selected_code}.jpg",
+            mime="image/jpeg",
+            type="primary"
+        )
 
     with col_preview:
-        if sheet_img is not None:
-            st.image(sheet_img, caption=f"معاينة اللوحة التعاقدية - {selected_code}", width="stretch")
+        st.image(sheet_img, caption=f"معاينة - {selected_code}")
 
 with tab_batch:
-    st.subheader("توليد مجموعة وحدات أو الدور بالكامل بضغطة زر")
     selected_batch = st.multiselect(
-        "اختر الوحدات المطلوب استخراج لوحاتها (أو اتركها كما هي لتوليد القائمة المختارة):",
+        "اختر الوحدات المطلوب استخراج لوحاتها:",
         options=list(FIRST_FLOOR_UNITS.keys()),
-        default=["AX-101", "AX-102", "AX-103", "AX-104", "AX-120", "BX-107"]
+        default=["AX-101", "AX-102", "AX-103"]
     )
-    select_all = st.checkbox("تحديد كل وحدات الدور بالكامل (54 وحدة)")
-    if select_all:
-        selected_batch = list(FIRST_FLOOR_UNITS.keys())
 
     if st.button(f"🚀 توليد وحزم {len(selected_batch)} لوحة الآن", type="primary", disabled=(len(selected_batch) == 0)):
-        progress = st.progress(0, text="جاري توليد اللوحات أوتوماتيكياً...")
         zip_buf = io.BytesIO()
-        jpg_pages = []   # JPEG bytes only (small) instead of full-size images in RAM
-        failed = []
-
         with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
             for idx, code in enumerate(selected_batch):
-                progress.progress((idx + 1) / len(selected_batch), text=f"جاري تجهيز لوحة {code} ({idx + 1}/{len(selected_batch)})...")
-                try:
-                    s_im = generate_sheet_for_unit(
-                        unit_code=code,
-                        template_img=template_img,
-                        arr_clean=arr_clean,
-                        labeled_p=labeled_p,
-                        labeled_b=labeled_b,
-                        labeled_g=labeled_g,
-                        all_units_mask=all_units_mask,
-                        floor_text=floor_name,
-                        clean_cad_mode=clean_cad_mode
-                    )
-                except Exception as e:
-                    failed.append((code, str(e)))
-                    continue
+                s_im = generate_sheet_for_unit(
+                    unit_code=code,
+                    template_img=template_img,
+                    arr_clean=arr_clean,
+                    labeled_p=labeled_p,
+                    labeled_b=labeled_b,
+                    labeled_g=labeled_g,
+                    all_units_mask=all_units_mask,
+                    floor_text=floor_name,
+                    clean_cad_mode=clean_cad_mode
+                )
                 img_bytes = io.BytesIO()
-                s_im.save(img_bytes, format="JPEG", quality=95)
-                jpg = img_bytes.getvalue()
-                zf.writestr(f"{code}.jpg", jpg)
-                jpg_pages.append(jpg)
-                del s_im
+                s_im.save(img_bytes, format="JPEG", quality=80)
+                zf.writestr(f"{code}.jpg", img_bytes.getvalue())
+                del s_im  # Free RAM instantly
 
-        progress.empty()
-
-        pdf_bytes = None
-        if jpg_pages:
-            def _page_iter():
-                for b in jpg_pages[1:]:
-                    yield Image.open(io.BytesIO(b)).convert("RGB")
-
-            first = Image.open(io.BytesIO(jpg_pages[0])).convert("RGB")
-            pdf_all_buf = io.BytesIO()
-            first.save(
-                pdf_all_buf,
-                format="PDF",
-                resolution=300.0,
-                save_all=True,
-                append_images=_page_iter()
-            )
-            pdf_bytes = pdf_all_buf.getvalue()
-
-        # keep results in session_state so they survive the rerun caused by download buttons
-        st.session_state["batch_result"] = {
-            "zip": zip_buf.getvalue() if jpg_pages else None,
-            "pdf": pdf_bytes,
-            "count": len(jpg_pages),
-            "failed": failed,
-            "floor": floor_name.replace(" ", "_"),
-        }
-
-    res = st.session_state.get("batch_result")
-    if res:
-        if res["count"] > 0:
-            st.success(f"تم توليد {res['count']} لوحة بنجاح!")
-        for code, err in res["failed"]:
-            st.error(f"فشل توليد {code}: {err}")
-
-        if res["count"] > 0:
-            c1, c2 = st.columns(2)
-            c1.download_button(
-                label=f"📦 تحميل جميع اللوحات كملف مضغوط ({res['count']} صورة JPG في ZIP)",
-                data=res["zip"],
-                file_name=f"{res['floor']}_Unit_Sheets.zip",
-                mime="application/zip",
-                width="stretch",
-                type="primary"
-            )
-            c2.download_button(
-                label=f"📕 تحميل كتاب موحد بجميع اللوحات ({res['count']} صفحة PDF)",
-                data=res["pdf"],
-                file_name=f"{res['floor']}_All_Units.pdf",
-                mime="application/pdf",
-                width="stretch"
-            )
+        st.success("تم توليد الحزمة بنجاح!")
+        st.download_button(
+            label="📦 تحميل ZIP لجميع اللوحات",
+            data=zip_buf.getvalue(),
+            file_name=f"{floor_name}_Units.zip",
+            mime="application/zip",
+            type="primary"
+        )
