@@ -7,14 +7,14 @@ import zipfile
 
 st.set_page_config(page_title="Precise Unit Annex Generator", layout="wide")
 
-st.title("🏢 E Taje Floor Plan Annex Generator (Precise Unit Crop)")
-st.write("Erfa3 sorat el-Template el-asly w sorat el-Floor Plan, w el-system hay-e2ra kol unit w y-3melha crop mazboot!")
+st.title("🏢 E Taje Floor Plan Annex Generator")
+st.write("الرجاء رفع صورة التمبلت الأصلية وصورة الفلور بلان، وسيتم توليد ملاحق الوحدات بدقة عالية.")
 
 col1, col2 = st.columns(2)
 with col1:
-    template_file = st.file_uploader("1. Erfa3 sorat el-Template el-Asly (JPG / PNG)", type=["jpg", "jpeg", "png"])
+    template_file = st.file_uploader("1. ارفع صورة التمبلت الأصلية (JPG / PNG)", type=["jpg", "jpeg", "png"])
 with col2:
-    floor_file = st.file_uploader("2. Erfa3 sorat el-Floor Plan el-Asly (JPG / PNG)", type=["jpg", "jpeg", "png"])
+    floor_file = st.file_uploader("2. ارفع صورة الفلور بلان الأصلية (JPG / PNG)", type=["jpg", "jpeg", "png"])
 
 if template_file and floor_file:
     template_bytes = template_file.read()
@@ -26,10 +26,10 @@ if template_file and floor_file:
     floor_np = cv2.imdecode(np.asarray(bytearray(floor_bytes), dtype=np.uint8), cv2.IMREAD_COLOR)
     fh, fw, _ = floor_np.shape
 
-    # --- DEFINE PRECISE UNITS DATABASE (CX & DX) ---
+    # --- قاعدة بيانات آمنة ودقيقة للـ 54 وحدة (CX & DX) ---
     detected_units = []
     
-    # Zone C: CX-101 to CX-144 (44 units)
+    # منطقة C: من CX-101 إلى CX-144 (44 وحدة)
     for i in range(44):
         code_str = f"CX-{101 + i}"
         col_idx = i % 11
@@ -37,13 +37,13 @@ if template_file and floor_file:
         detected_units.append({
             "code": code_str,
             "area": "103" if i % 2 == 0 else "92",
-            "x": int(fw * 0.05 + col_idx * (fw * 0.08)),
-            "y": int(fh * 0.1 + row_idx * (fh * 0.15)),
-            "w": int(fw * 0.07),
-            "h": int(fh * 0.12)
+            "x": int(max(10, fw * 0.05 + col_idx * (fw * 0.07))),
+            "y": int(max(10, fh * 0.1 + row_idx * (fh * 0.12))),
+            "w": int(fw * 0.06),
+            "h": int(fh * 0.10)
         })
 
-    # Zone D: DX-101 to DX-110 (10 units)
+    # منطقة D: من DX-101 إلى DX-110 (10 وحدات)
     for i in range(10):
         code_str = f"DX-{101 + i}"
         col_idx = i % 5
@@ -51,19 +51,19 @@ if template_file and floor_file:
         detected_units.append({
             "code": code_str,
             "area": "74" if i % 2 == 0 else "55",
-            "x": int(fw * 0.65 + col_idx * (fw * 0.06)),
-            "y": int(fh * 0.6 + row_idx * (fh * 0.15)),
+            "x": int(max(10, fw * 0.60 + col_idx * (fw * 0.06))),
+            "y": int(max(10, fh * 0.55 + row_idx * (fh * 0.12))),
             "w": int(fw * 0.05),
-            "h": int(fh * 0.12)
+            "h": int(fh * 0.10)
         })
 
-    st.success(f"🔍 El-System gahaz el-database le-kol el-units! Total: **{len(detected_units)} unit** (CX & DX)")
+    st.success(تم تجهيز بيانات الـ 54 وحدة بنجاح (CX & DX)!)
 
     st.markdown("---")
-    st.subheader("⚙️ Ikhtar Tareeqat el-Tawleed:")
+    st.subheader("⚙️ خيارات التوليد:")
     choice = st.radio(
-        "Enta 3ayz t-3mel eih?",
-        ("Generate kol el-units (ZIP - JPG High Quality)", "Ikhtar unit wehda moayana")
+        "اختر طريقة العمل المطلوبة:",
+        ("توليد جميع الوحدات دفعة واحدة (ملف ZIP صور JPG عالية الجودة)", "اختيار وحدة محددة واستخراجها منفردة")
     )
 
     def generate_annex_jpg(unit_info):
@@ -73,29 +73,29 @@ if template_file and floor_file:
         area = unit_info["area"]
         x, y, w, h = unit_info["x"], unit_info["y"], unit_info["w"], unit_info["h"]
 
-        # 1. Crop SPECIFIC unit from floor plan and resize to upper section
-        x1 = max(0, x)
-        y1 = max(0, y)
-        x2 = min(fw, x + w)
-        y2 = min(fh, y + h)
-        
+        # التأكد من عدم تجاوز حدود الصورة الحقيقية للفلور بلان
+        x1 = max(0, min(x, fw - 5))
+        y1 = max(0, min(y, fh - 5))
+        x2 = max(x1 + 10, min(x + w, fw))
+        y2 = max(y1 + 10, min(y + h, fh))
+
+        # 1. قص الوحدة المحددة وتكبيرها للقسم العلوي
         unit_crop = pil_floor.crop((x1, y1, x2, y2))
         unit_crop_resized = unit_crop.resize((420, 300))
         
-        # Position for upper section crop on template
         upper_pos = (150, 120)
         annex_img.paste(unit_crop_resized, upper_pos)
 
-        # 2. Generate Key Plan with Red Highlight for lower section (Highlighting exact unit box)
+        # 2. إنشاء الـ Key Plan السفلي مع تحديد الوحدة المختارة بالمستطيل الأحمر
         key_plan_cv = floor_np.copy()
-        cv2.rectangle(key_plan_cv, (x1, y1), (x2, y2), (0, 0, 255), -1) # Red fill
+        cv2.rectangle(key_plan_cv, (x1, y1), (x2, y2), (0, 0, 255), -1) # تلوين أحمر كامل
         key_rgb = cv2.cvtColor(key_plan_cv, cv2.COLOR_BGR2RGB)
         key_pil = Image.fromarray(key_rgb).resize((320, 200))
         
         lower_pos = (145, 410)
         annex_img.paste(key_pil, lower_pos)
 
-        # 3. Draw Unit Code & Area text at footer table
+        # 3. كتابة كود الوحدة والمساحة في جدول الـ Footer بالأسفل
         draw = ImageDraw.Draw(annex_img)
         code_pos = (360, 775)
         area_pos = (470, 775)
@@ -108,17 +108,17 @@ if template_file and floor_file:
         buf.seek(0)
         return buf
 
-    if choice == "Generate kol el-units (ZIP - JPG High Quality)":
-        if st.button("🚀 Start Generate Kol el-Annexes (JPG)"):
+    if choice == "توليد جميع الوحدات دفعة واحدة (ملف ZIP صور JPG عالية الجودة)":
+        if st.button("🚀 ابدأ توليد جميع الملاحق بصيغة JPG"):
             zip_buffer = io.BytesIO()
             with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
                 for u in detected_units:
                     jpg_buf = generate_annex_jpg(u)
                     zip_file.writestr(f"Annex_{u['code']}.jpg", jpg_buf.getvalue())
             
-            st.success("Tamm e'dad kol el-annexes JPG le-l-54 unit be-naga7!")
+            st.success("تم الانتهاء من توليد جميع ملاحق الـ 54 وحدة بنجاح!")
             st.download_button(
-                label="📥 Download Kol el-Annexes (ZIP)",
+                label="📥 تحميل ملف الـ ZIP لكل الملاحق",
                 data=zip_buffer.getvalue(),
                 file_name="All_54_Units_Annexes.zip",
                 mime="application/zip"
@@ -126,15 +126,15 @@ if template_file and floor_file:
             
     else:
         unit_codes = [u["code"] for u in detected_units]
-        selected_code = st.selectbox("Ekhtar el-Unit el-ly enta 3ayzha:", unit_codes)
+        selected_code = st.selectbox("اختر كود الوحدة المطلوبة:", unit_codes)
         selected_unit = next(u for u in detected_units if u["code"] == selected_code)
         
-        if st.button(f"🚀 Generate Annex lel-Unit {selected_code}"):
+        if st.button(f"🚀 توليد ملاحق الوحدة {selected_code}"):
             jpg_buf = generate_annex_jpg(selected_unit)
-            st.success(f"Tamm e'dad annex unit {selected_code} be-naga7!")
+            st.success(f"تم توليد ملحق الوحدة {selected_code} بنجاح!")
             st.image(jpg_buf, caption=f"Annex {selected_code}", use_column_width=True)
             st.download_button(
-                label=f"📥 Download Annex_{selected_code}.jpg",
+                label=f"📥 تحميل صورة Annex_{selected_code}.jpg",
                 data=jpg_buf.getvalue(),
                 file_name=f"Annex_{selected_code}.jpg",
                 mime="image/jpeg"
