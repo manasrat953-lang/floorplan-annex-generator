@@ -52,13 +52,11 @@ if floor_file is not None:
         valid_boxes = []
         for cnt in contours:
             x, y, w, h = cv2.boundingRect(cnt)
-            # فلترة مساحات الغرف والوحدات المعمارية بدقة تتناسب مع أبعاد الصورة المرفوعة
             area = w * h
             if (fw * 0.015 < w < fw * 0.28) and (fh * 0.015 < h < fh * 0.28):
                 if (fw * fh * 0.0004) < area < (fw * fh * 0.06):
                     valid_boxes.append({"x": x, "y": y, "w": w, "h": h})
 
-        # ترتيب الوحدات جغرافياً ومنهجياً من الأعلى للأسفل ومن اليسار لليمين
         valid_boxes = sorted(valid_boxes, key=lambda b: (b['y'] // 60, b['x']))
 
         extracted_units = []
@@ -66,7 +64,6 @@ if floor_file is not None:
         dx_count = 101
 
         for idx, box in enumerate(valid_boxes):
-            # تحديد البادئة بناءً على الموقع الأفقي في المخطط (اليسار يمثل الجانب الرئيسي، اليمين يمثل الكتلة المنفصلة)
             if box['x'] < fw * 0.58:
                 prefix = "CX"
                 code_str = f"{prefix}-{cx_count}"
@@ -84,7 +81,6 @@ if floor_file is not None:
                 "x": box['x'], "y": box['y'], "w": box['w'], "h": box['h']
             })
 
-        # ضمان استقرار النتائج وعدم إرجاع أصفار تحت أي ظرف
         if len(extracted_units) == 0:
             for i in range(15):
                 extracted_units.append({
@@ -102,11 +98,11 @@ if floor_file is not None:
 
         total_units = len(extracted_units)
 
-        st.success(تم تحليل المخطط بنجاح! الإجمالي الفعلي للوحدات المكتشفة: {total_units} وحدة.)
+        st.success(f"تم تحليل المخطط بنجاح! الإجمالي الفعلي للوحدات المكتشفة: {total_units} وحدة.")
         
         cols = st.columns(len(prefix_counts) + 1)
         for i, (p, cnt) in enumerate(prefix_counts.items()):
-            cols[i].metric(وحدات {p}, cnt)
+            cols[i].metric(f"وحدات {p}", cnt)
         cols[-1].metric("الإجمالي الكلي", total_units)
 
         st.markdown("---")
@@ -125,19 +121,16 @@ if floor_file is not None:
 
             draw_temp = ImageDraw.Draw(img_copy)
             
-            # 1. قص الوحدة وتكبيرها في القسم العلوي للتمبلت
             unit_crop = pil_floor.crop((x1, y1, x2, y2))
             unit_crop_resized = unit_crop.resize((1500, 1300))
             img_copy.paste(unit_crop_resized, (500, 300))
 
-            # 2. Key Plan السفلي مع الإطار الأحمر الدقيق حول الوحدة المختارة
             key_plan_cv = floor_np.copy()
             cv2.rectangle(key_plan_cv, (x1, y1), (x2, y2), (0, 0, 255), 6)
             key_rgb = cv2.cvtColor(key_plan_cv, cv2.COLOR_BGR2RGB)
             key_pil = Image.fromarray(key_rgb).resize((1500, 700))
             img_copy.paste(key_pil, (500, 2320))
 
-            # 3. كتابة الكود والمساحة في الفوتر بالتمبلت
             draw_temp.text((1350, template_height - 180), code, fill=(0, 0, 0))
             draw_temp.text((2150, template_height - 180), f"Gross Area = {area} M²", fill=(0, 0, 0))
 
