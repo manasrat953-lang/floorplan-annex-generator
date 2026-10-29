@@ -5,10 +5,10 @@ from PIL import Image, ImageDraw
 import io
 import zipfile
 
-st.set_page_config(page_title="E Taje Full-Plan Engine", layout="wide")
+st.set_page_config(page_title="E Taje Strict Precision Engine", layout="wide")
 
 st.title("مولد ملاحق الوحدات المعمارية - E Taje Commercial")
-st.write("محرك التحليل الهندسي المتقدم: استخراج وعدّ جميع وحدات الفلور بلان بالكامل بدقة تامة وبدون أي نقص.")
+st.write("محرك الفلترة الدقيقة الصارم: استبعاد الشخابيط والأعمدة وعدّ الوحدات الرئيسية الحقيقية فقط.")
 
 floor_file = st.file_uploader("رفـع صورة الفلور بلان (JPG / PNG)", type=["jpg", "jpeg", "png"])
 
@@ -39,53 +39,57 @@ if floor_file is not None:
         floor_np = cv2.imdecode(np.asarray(bytearray(floor_bytes), dtype=np.uint8), cv2.IMREAD_COLOR)
         fh, fw, _ = floor_np.shape
 
-        # معالجة هندسية عميقة لاستخلاص كل الحدود والكتل باللوحة بدقة متناهية
+        # معالجة صارمة جداً لاستبعاد أي خطوط رفيعة أو تفاصيل داخلية
         gray = cv2.cvtColor(floor_np, cv2.COLOR_BGR2GRAY)
-        blur = cv2.GaussianBlur(gray, (3, 3), 0)
+        blur = cv2.GaussianBlur(gray, (5, 5), 0)
+        _, thresh = cv2.threshold(blur, 210, 255, cv2.THRESH_BINARY_INV)
         
-        # استخدام Adaptive Threshold لضمان قراءة الخطوط بغض النظر عن تفاصيل الخلفية
-        thresh = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 15, 3)
+        # إغلاق الفراغات الصغيرة لتوحيد كتلة الوحدة المعمارية بالكامل
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+        closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=2)
         
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
-        closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=1)
-        
-        contours, _ = cv2.findContours(closed, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         valid_boxes = []
         for cnt in contours:
             x, y, w, h = cv2.boundingRect(cnt)
             area = w * h
-            # نطاق مساحات مرن يشمل كل الوحدات الصغيرة والكبيرة في الفلور بلان بالكامل
-            if (fw * 0.012 < w < fw * 0.35) and (fh * 0.012 < h < fh * 0.35):
-                if (fw * fh * 0.0002) < area < (fw * fh * 0.08):
+            
+            # فلاتر مساحة وأبعاد صارمة جداً لتقع فقط على مساحات الوحدات المعمارية الفعلية
+            # منع أي تفاصيل صغيرة أو أعمدة أو مساحات خدمات ضخمة من الدخول
+            min_w = fw * 0.035
+            max_w = fw * 0.18
+            min_h = fh * 0.035
+            max_h = fh * 0.18
+            
+            if min_w < w < max_w and min_h < h < max_h:
+                if (fw * fh * 0.0015) < area < (fw * fh * 0.03):
                     valid_boxes.append({"x": x, "y": y, "w": w, "h": h})
 
-        # فلترة المربعات المتداخلة لتنظيف النتيجة والحصول على الوحدات الصافية فقط
+        # تنظيف المربعات المكررة والمتداخلة تماماً
         filtered_boxes = []
         for b1 in valid_boxes:
-            is_duplicate = False
+            is_overlap = False
             for b2 in filtered_boxes:
-                # لو المربعين قريبين جداً من بعض في الإحداثيات نعتبرهم وحدة واحدة
-                if abs(b1['x'] - b2['x']) < 20 and abs(b1['y'] - b2['y']) < 20:
-                    is_duplicate = True
+                if abs(b1['x'] - b2['x']) < 40 and abs(b1['y'] - b2['y']) < 40:
+                    is_overlap = True
                     break
-            if not is_duplicate:
+            if not is_overlap:
                 filtered_boxes.append(b1)
 
-        # ترتيب الوحدات جغرافياً ومنهجياً من الأعلى للأسفل ومن اليسار لليمين
-        filtered_boxes = sorted(filtered_boxes, key=lambda b: (b['y'] // 40, b['x']))
+        # ترتيب الوحدات جغرافياً
+        filtered_boxes = sorted(filtered_boxes, key=lambda b: (b['y'] // 80, b['x']))
 
         extracted_units = []
         cx_count = 101
         dx_count = 101
 
         for idx, box in enumerate(filtered_boxes):
-            # تقسيم الكتل حسب موقعها المعماري في اللوحة (اليسار/المنحنى يمثل CX، اليمين يمثل DX)
             if box['x'] < fw * 0.58:
                 prefix = "CX"
                 code_str = f"{prefix}-{cx_count}"
                 cx_count += 1
-                area_val = "103"
+                area_val = "92"
             else:
                 prefix = "DX"
                 code_str = f"{prefix}-{dx_count}"
@@ -105,7 +109,7 @@ if floor_file is not None:
 
         total_units = len(extracted_units)
 
-        st.success(f"تم تحليل المخطط بالكامل واستخراج جميع الوحدات بنجاح! الإجمالي: {total_units} وحدة.")
+        st.success(f"تمت الفلترة بنجاح! الإجمالي الحقيقي للوحدات المعمارية الصافية: {total_units} وحدة.")
         
         if total_units > 0:
             cols = st.columns(len(prefix_counts) + 1)
@@ -113,7 +117,7 @@ if floor_file is not None:
                 cols[i].metric(f"وحدات {p}", cnt)
             cols[-1].metric("الإجمالي الكلي", total_units)
         else:
-            st.warning("لم يتم رصد وحدات كافية، تأكد من وضوح الفلور بلان المرفوع.")
+            st.warning("لم يتم رصد وحدات بعد الفلترة الصارمة. تأكد من وضوح الفلور بلان.")
 
         st.markdown("---")
         choice = st.radio("اختر طريقة التوليد المطلوبة:", ("توليد جميع الوحدات (ملف ZIP بصيغة JPG)", "اختيار وحدة محددة واستخراجها منفردة"))
@@ -131,19 +135,16 @@ if floor_file is not None:
 
             draw_temp = ImageDraw.Draw(img_copy)
             
-            # 1. قص الوحدة وتكبيرها في القسم العلوي للتمبلت
             unit_crop = pil_floor.crop((x1, y1, x2, y2))
             unit_crop_resized = unit_crop.resize((1500, 1300))
             img_copy.paste(unit_crop_resized, (500, 300))
 
-            # 2. Key Plan السفلي مع الإطار الأحمر الدقيق حول الوحدة المختارة
             key_plan_cv = floor_np.copy()
             cv2.rectangle(key_plan_cv, (x1, y1), (x2, y2), (0, 0, 255), 6)
             key_rgb = cv2.cvtColor(key_plan_cv, cv2.COLOR_BGR2RGB)
             key_pil = Image.fromarray(key_rgb).resize((1500, 700))
             img_copy.paste(key_pil, (500, 2320))
 
-            # 3. كتابة الكود والمساحة في الفوتر بالتمبلت
             draw_temp.text((1350, template_height - 180), code, fill=(0, 0, 0))
             draw_temp.text((2150, template_height - 180), f"Gross Area = {area} M²", fill=(0, 0, 0))
 
@@ -167,7 +168,7 @@ if floor_file is not None:
                     st.download_button(
                         label="تحميل ملف الـ ZIP لجميع الوحدات",
                         data=zip_buffer.getvalue(),
-                        file_name="Full_Plan_Units_Annexes.zip",
+                        file_name="Strict_Units_Annexes.zip",
                         mime="application/zip"
                     )
         else:
@@ -183,7 +184,7 @@ if floor_file is not None:
                     st.success(f"تم توليد ملحق الوحدة {selected_code} بنجاح!")
                     st.image(img_buf, caption=f"Annex {selected_code}", use_container_width=True)
                     st.download_button(
-                        label=f"تحميل صورة Annex_{selected_code}.jpg",
+                        label=f5"تحميل صورة Annex_{selected_code}.jpg",
                         data=img_buf.getvalue(),
                         file_name=f"Annex_{selected_code}.jpg",
                         mime="image/jpeg"
