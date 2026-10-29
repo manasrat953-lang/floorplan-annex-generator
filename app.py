@@ -57,7 +57,7 @@ if template_file and floor_file:
             "h": int(fh * 0.10)
         })
 
-    st.success(تم تجهيز بيانات الـ 54 وحدة بنجاح (CX & DX)!)
+    st.success("تم تجهيز بيانات الـ 54 وحدة بنجاح (CX & DX)!")
 
     st.markdown("---")
     st.subheader("⚙️ خيارات التوليد:")
@@ -88,7 +88,7 @@ if template_file and floor_file:
 
         # 2. إنشاء الـ Key Plan السفلي مع تحديد الوحدة المختارة بالمستطيل الأحمر
         key_plan_cv = floor_np.copy()
-        cv2.rectangle(key_plan_cv, (x1, y1), (x2, y2), (0, 0, 255), -1) # تلوين أحمر كامل
+        cv2.rectangle(key_plan_cv, (x1, y1), (x2, y2), (0, 0, 255), -1)
         key_rgb = cv2.cvtColor(key_plan_cv, cv2.COLOR_BGR2RGB)
         key_pil = Image.fromarray(key_rgb).resize((320, 200))
         
