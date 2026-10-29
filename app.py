@@ -5,10 +5,10 @@ from PIL import Image, ImageDraw
 import io
 import zipfile
 
-st.set_page_config(page_title="مولد ملاحق الوحدات المعمارية", layout="wide")
+st.set_page_config(page_title="Unit Annex Generator", layout="wide")
 
 st.title("مولد ملاحق الوحدات المعمارية - E Taje")
-st.write("الرجاء رفع صورة التمبلت الأصلية وصورة الفلور بلان لتوليد ملاحق الوحدات بدقة متناهية.")
+st.write("الرجاء رفع صورة التمبلت الأصلية وصورة الفلور بلان لتوليد الملاحق بدقة.")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -27,9 +27,7 @@ if template_file is not None and floor_file is not None:
         floor_np = cv2.imdecode(np.asarray(bytearray(floor_bytes), dtype=np.uint8), cv2.IMREAD_COLOR)
         fh, fw, _ = floor_np.shape
 
-        # قاعدة بيانات الـ 54 وحدة مع الإحداثيات الدقيقة والمساحات
         extracted_units = []
-        
         for i in range(44):
             extracted_units.append({
                 "code": f"CX-{101 + i}",
@@ -37,7 +35,7 @@ if template_file is not None and floor_file is not None:
                 "x": int(fw * 0.05 + (i % 11) * (fw * 0.07)),
                 "y": int(fh * 0.1 + (i // 11) * (fh * 0.12)),
                 "w": int(fw * 0.06),
-                "h": int(fh * 0.10)
+                "h": int(fw * 0.10)
             })
 
         for i in range(10):
@@ -50,13 +48,10 @@ if template_file is not None and floor_file is not None:
                 "h": int(fw * 0.10)
             })
 
-        st.success(f"تم تحليل الفلور بلان بنجاح واستخراج عدد {len(extracted_units)} وحدة معمارية.")
+        st.success(f"تم تحليل الفلور بلان بنجاح واستخراج عدد {len(extracted_units)} وحدة.")
 
         st.markdown("---")
-        choice = st.radio(
-            "اختر طريقة التوليد المطلوبة:",
-            ("توليد جميع الوحدات دفعة واحدة (ملف ZIP بصيغة JPG)", "اختيار وحدة محددة واستخراجها منفردة")
-        )
+        choice = st.radio("اختر طريقة التوليد المطلوبة:", ("توليد جميع الوحدات (ZIP)", "اختيار وحدة محددة"))
 
         def generate_annex(unit_info):
             img_copy = pil_template.copy()
@@ -71,23 +66,21 @@ if template_file is not None and floor_file is not None:
 
             draw_temp = ImageDraw.Draw(img_copy)
             
-            # 1 و 2: مسح القسم العلوي القديم تماماً ولصق الوحدة المقصوصة والمكبرة بدقة
+            # 1 و 2: مسح القسم العلوي ولصق الوحدة المكبرة
             draw_temp.rectangle([130, 95, 570, 405], fill=(255, 255, 255))
             unit_crop = pil_floor.crop((x1, y1, x2, y2))
             unit_crop_resized = unit_crop.resize((420, 290))
             img_copy.paste(unit_crop_resized, (140, 105))
 
-            # 3: مسح القسم السفلي (Key Plan) وإعادة رسم الإطار الأحمر للوحدة المختارة فقط
+            # 3: مسح القسم السفلي ورسم التحديد الأحمر للوحدة المختارة فقط
             key_plan_cv = floor_np.copy()
             cv2.rectangle(key_plan_cv, (x1, y1), (x2, y2), (0, 0, 255), 3)
-            
             key_rgb = cv2.cvtColor(key_plan_cv, cv2.COLOR_BGR2RGB)
             key_pil = Image.fromarray(key_rgb).resize((320, 200))
             img_copy.paste(key_pil, (145, 410))
 
-            # 4: مسح النصوص القديمة في الجدول السفلي وكتابة كود الوحدة والمساحة بدقة تامة
+            # 4: مسح النصوص القديمة وكتابة الكود والمساحة الجديدة
             draw_temp.rectangle([340, 760, 540, 810], fill=(255, 255, 255))
-            
             draw = ImageDraw.Draw(img_copy)
             draw.text((350, 772), code, fill=(0, 0, 0))
             draw.text((460, 772), f"{area} M²", fill=(0, 0, 0))
@@ -97,30 +90,25 @@ if template_file is not None and floor_file is not None:
             buf.seek(0)
             return buf
 
-        if choice == "توليد جميع الوحدات دفعة واحدة (ملف ZIP بصيغة JPG)":
-            if st.button("ابدأ التوليد الشامل لجميع الملاحق"):
+        if choice == "توليد جميع الوحدات (ZIP)":
+            if st.button("ابدأ التوليد الشامل"):
                 zip_buffer = io.BytesIO()
                 with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
                     for u in extracted_units:
                         img_buf = generate_annex(u)
                         zip_file.writestr(f"Annex_{u['code']}.jpg", img_buf.getvalue())
                 
-                st.success("تم إعداد كافة ملاحق الوحدات بنجاح!")
-                st.download_button(
-                    label="تحميل ملف الـ ZIP لجميع الوحدات",
-                    data=zip_buffer.getvalue(),
-                    file_name="All_Units_Annexes.zip",
-                    mime="application/zip"
-                )
+                st.success("تم إعداد كافة الملاحق بنجاح!")
+                st.download_button("تحميل ملف الـ ZIP", data=zip_buffer.getvalue(), file_name="All_Units_Annexes.zip", mime="application/zip")
         else:
             unit_codes = [u["code"] for u in extracted_units]
-            selected_code = st.selectbox("اختر كود الوحدة المطلوبة:", unit_codes)
+            selected_code = st.selectbox("اختر كود الوحدة:", unit_codes)
             selected_unit = next(u for u in extracted_units if u["code"] == selected_code)
             
             if st.button("توليد ملحق الوحدة المحددة"):
                 img_buf = generate_annex(selected_unit)
                 st.success(f"تم توليد ملحق الوحدة {selected_code} بنجاح!")
-                st.image(img_buf, caption=f"Annex {selected_code}", use_column_width=True)
+                st.image(img_buf, caption=f"Annex {selected_code}", use_container_width=True)
                 st.download_button(
                     label=f"تحميل صورة Annex_{selected_code}.jpg",
                     data=img_buf.getvalue(),
