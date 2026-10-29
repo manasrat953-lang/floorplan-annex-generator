@@ -1,3 +1,5 @@
 streamlit
-pillow
 numpy
+pillow
+opencv-python-headless
+scipy
