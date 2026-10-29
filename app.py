@@ -7,7 +7,7 @@ import zipfile
 
 st.set_page_config(page_title="Precise Unit Annex Generator", layout="wide")
 
-st.title("🏢 E Taje Floor Plan Annex Generator")
+st.title("E Taje Floor Plan Annex Generator")
 st.write("الرجاء رفع صورة التمبلت الأصلية وصورة الفلور بلان، وسيتم توليد ملاحق الوحدات بدقة عالية.")
 
 col1, col2 = st.columns(2)
@@ -54,13 +54,13 @@ if template_file and floor_file:
             "x": int(max(10, fw * 0.60 + col_idx * (fw * 0.06))),
             "y": int(max(10, fh * 0.55 + row_idx * (fh * 0.12))),
             "w": int(fw * 0.05),
-            "h": int(fh * 0.10)
+            "h": int(fw * 0.10)
         })
 
     st.success("تم تجهيز بيانات الـ 54 وحدة بنجاح (CX & DX)!")
 
     st.markdown("---")
-    st.subheader("⚙️ خيارات التوليد:")
+    st.subheader("خيارات التوليد:")
     choice = st.radio(
         "اختر طريقة العمل المطلوبة:",
         ("توليد جميع الوحدات دفعة واحدة (ملف ZIP صور JPG عالية الجودة)", "اختيار وحدة محددة واستخراجها منفردة")
@@ -109,7 +109,7 @@ if template_file and floor_file:
         return buf
 
     if choice == "توليد جميع الوحدات دفعة واحدة (ملف ZIP صور JPG عالية الجودة)":
-        if st.button("🚀 ابدأ توليد جميع الملاحق بصيغة JPG"):
+        if st.button("ابدأ توليد جميع الملاحق بصيغة JPG"):
             zip_buffer = io.BytesIO()
             with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
                 for u in detected_units:
@@ -118,7 +118,7 @@ if template_file and floor_file:
             
             st.success("تم الانتهاء من توليد جميع ملاحق الـ 54 وحدة بنجاح!")
             st.download_button(
-                label="📥 تحميل ملف الـ ZIP لكل الملاحق",
+                label="تحميل ملف الـ ZIP لكل الملاحق",
                 data=zip_buffer.getvalue(),
                 file_name="All_54_Units_Annexes.zip",
                 mime="application/zip"
@@ -129,12 +129,12 @@ if template_file and floor_file:
         selected_code = st.selectbox("اختر كود الوحدة المطلوبة:", unit_codes)
         selected_unit = next(u for u in detected_units if u["code"] == selected_code)
         
-        if st.button(f"🚀 توليد ملاحق الوحدة {selected_code}"):
+        if st.button(f"توليد ملحق الوحدة {selected_code}"):
             jpg_buf = generate_annex_jpg(selected_unit)
             st.success(f"تم توليد ملحق الوحدة {selected_code} بنجاح!")
             st.image(jpg_buf, caption=f"Annex {selected_code}", use_column_width=True)
             st.download_button(
-                label=f"📥 تحميل صورة Annex_{selected_code}.jpg",
+                label=f"تحميل صورة Annex_{selected_code}.jpg",
                 data=jpg_buf.getvalue(),
                 file_name=f"Annex_{selected_code}.jpg",
                 mime="image/jpeg"
