@@ -1,9 +1,6 @@
 import streamlit as st
-import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import io
-import zipfile
-import os
 
 st.set_page_config(
     page_title="Auto Contract Sheet Generator",
@@ -14,61 +11,62 @@ st.set_page_config(
 BLACK_LINE = (0, 0, 0)
 WHITE_FILL = (255, 255, 255)
 
+# قاعدة بيانات الوحدات مع الإحداثيات المبسطة
 FIRST_FLOOR_UNITS = {
-    "AX-101": {"area": 103, "spill": 0, "box": (860, 880, 950, 980)},
-    "AX-102": {"area": 52,  "spill": 0, "box": (790, 880, 860, 980)},
-    "AX-103": {"area": 52,  "spill": 0, "box": (730, 880, 800, 980)},
-    "AX-104": {"area": 103, "spill": 0, "box": (650, 880, 730, 980)},
-    "AX-105": {"area": 38,  "spill": 0, "box": (630, 810, 720, 890)},
-    "AX-106": {"area": 38,  "spill": 0, "box": (630, 760, 720, 835)},
-    "AX-107": {"area": 38,  "spill": 0, "box": (630, 700, 720, 780)},
-    "AX-108": {"area": 38,  "spill": 0, "box": (630, 650, 720, 725)},
-    "AX-109": {"area": 39,  "spill": 0, "box": (630, 595, 720, 670)},
-    "AX-110": {"area": 52,  "spill": 0, "box": (620, 545, 710, 620)},
-    "AX-111": {"area": 102, "spill": 0, "box": (660, 480, 755, 565)},
-    "AX-112": {"area": 103, "spill": 0, "box": (635, 415, 730, 500)},
-    "AX-113": {"area": 103, "spill": 0, "box": (585, 365, 680, 455)},
-    "AX-114": {"area": 104, "spill": 0, "box": (520, 335, 620, 425)},
-    "AX-115": {"area": 51,  "spill": 0, "box": (465, 385, 545, 470)},
-    "AX-116": {"area": 39,  "spill": 0, "box": (410, 375, 495, 455)},
-    "AX-117": {"area": 39,  "spill": 0, "box": (360, 375, 445, 440)},
-    "AX-118": {"area": 39,  "spill": 0, "box": (310, 375, 395, 435)},
-    "AX-119": {"area": 39,  "spill": 0, "box": (260, 375, 345, 435)},
-    "AX-120": {"area": 39,  "spill": 0, "box": (210, 375, 290, 435)},
-    "AX-121": {"area": 121, "spill": 0, "box": (115, 355, 205, 445)},
-    "AX-122": {"area": 61,  "spill": 0, "box": (115, 280, 205, 360)},
-    "AX-123": {"area": 61,  "spill": 0, "box": (115, 230, 205, 305)},
-    "AX-124": {"area": 121, "spill": 0, "box": (115, 145, 205, 235)},
-    "AX-125": {"area": 38,  "spill": 0, "box": (210, 130, 285, 200)},
-    "AX-126": {"area": 38,  "spill": 0, "box": (260, 130, 340, 200)},
-    "AX-127": {"area": 38,  "spill": 0, "box": (310, 130, 395, 200)},
-    "AX-128": {"area": 38,  "spill": 0, "box": (360, 130, 445, 200)},
-    "AX-129": {"area": 38,  "spill": 0, "box": (410, 130, 495, 200)},
-    "AX-130": {"area": 38,  "spill": 0, "box": (465, 130, 545, 200)},
-    "AX-131": {"area": 91,  "spill": 0, "box": (520, 160, 615, 250)},
-    "AX-132": {"area": 92,  "spill": 0, "box": (585, 175, 685, 270)},
-    "AX-133": {"area": 92,  "spill": 0, "box": (650, 200, 750, 295)},
-    "AX-134": {"area": 92,  "spill": 0, "box": (710, 240, 805, 330)},
-    "AX-135": {"area": 92,  "spill": 0, "box": (760, 290, 860, 380)},
-    "AX-136": {"area": 92,  "spill": 0, "box": (800, 345, 890, 435)},
-    "AX-137": {"area": 92,  "spill": 0, "box": (830, 410, 915, 500)},
-    "AX-138": {"area": 91,  "spill": 0, "box": (840, 475, 935, 565)},
-    "AX-139": {"area": 38,  "spill": 0, "box": (875, 540, 955, 615)},
-    "AX-140": {"area": 38,  "spill": 0, "box": (875, 595, 955, 670)},
-    "AX-141": {"area": 38,  "spill": 0, "box": (875, 650, 955, 725)},
-    "AX-142": {"area": 38,  "spill": 0, "box": (875, 700, 955, 780)},
-    "AX-143": {"area": 38,  "spill": 0, "box": (875, 760, 955, 835)},
-    "AX-144": {"area": 38,  "spill": 0, "box": (875, 810, 955, 890)},
-    "BX-101": {"area": 74,  "spill": 0, "box": (330, 555, 460, 630)},
-    "BX-102": {"area": 83,  "spill": 0, "box": (225, 540, 340, 620)},
-    "BX-103": {"area": 42,  "spill": 0, "box": (210, 595, 300, 675)},
-    "BX-104": {"area": 42,  "spill": 0, "box": (210, 650, 300, 725)},
-    "BX-105": {"area": 42,  "spill": 0, "box": (210, 700, 300, 780)},
-    "BX-106": {"area": 42,  "spill": 0, "box": (210, 755, 300, 835)},
-    "BX-107": {"area": 74,  "spill": 20, "box": (210, 835, 305, 985)},
-    "BX-108": {"area": 71,  "spill": 24, "box": (310, 860, 400, 985)},
-    "BX-109": {"area": 54,  "spill": 0, "box": (335, 800, 425, 885)},
-    "BX-110": {"area": 55,  "spill": 0, "box": (335, 750, 425, 830)},
+    "AX-101": {"area": 103, "box": (860, 880, 950, 980)},
+    "AX-102": {"area": 52,  "box": (790, 880, 860, 980)},
+    "AX-103": {"area": 52,  "box": (730, 880, 800, 980)},
+    "AX-104": {"area": 103, "box": (650, 880, 730, 980)},
+    "AX-105": {"area": 38,  "box": (630, 810, 720, 890)},
+    "AX-106": {"area": 38,  "box": (630, 760, 720, 835)},
+    "AX-107": {"area": 38,  "box": (630, 700, 720, 780)},
+    "AX-108": {"area": 38,  "box": (630, 650, 720, 725)},
+    "AX-109": {"area": 39,  "box": (630, 595, 720, 670)},
+    "AX-110": {"area": 52,  "box": (620, 545, 710, 620)},
+    "AX-111": {"area": 102, "box": (660, 480, 755, 565)},
+    "AX-112": {"area": 103, "box": (635, 415, 730, 500)},
+    "AX-113": {"area": 103, "box": (585, 365, 680, 455)},
+    "AX-114": {"area": 104, "box": (520, 335, 620, 425)},
+    "AX-115": {"area": 51,  "box": (465, 385, 545, 470)},
+    "AX-116": {"area": 39,  "box": (410, 375, 495, 455)},
+    "AX-117": {"area": 39,  "box": (360, 375, 445, 440)},
+    "AX-118": {"area": 39,  "box": (310, 375, 395, 435)},
+    "AX-119": {"area": 39,  "box": (260, 375, 345, 435)},
+    "AX-120": {"area": 39,  "box": (210, 375, 290, 435)},
+    "AX-121": {"area": 121, "box": (115, 355, 205, 445)},
+    "AX-122": {"area": 61,  "box": (115, 280, 205, 360)},
+    "AX-123": {"area": 61,  "box": (115, 230, 205, 305)},
+    "AX-124": {"area": 121, "box": (115, 145, 205, 235)},
+    "AX-125": {"area": 38,  "box": (210, 130, 285, 200)},
+    "AX-126": {"area": 38,  "box": (260, 130, 340, 200)},
+    "AX-127": {"area": 38,  "box": (310, 130, 395, 200)},
+    "AX-128": {"area": 38,  "box": (360, 130, 445, 200)},
+    "AX-129": {"area": 38,  "box": (410, 130, 495, 200)},
+    "AX-130": {"area": 38,  "box": (465, 130, 545, 200)},
+    "AX-131": {"area": 91,  "box": (520, 160, 615, 250)},
+    "AX-132": {"area": 92,  "box": (585, 175, 685, 270)},
+    "AX-133": {"area": 92,  "box": (650, 200, 750, 295)},
+    "AX-134": {"area": 92,  "box": (710, 240, 805, 330)},
+    "AX-135": {"area": 92,  "box": (760, 290, 860, 380)},
+    "AX-136": {"area": 92,  "box": (800, 345, 890, 435)},
+    "AX-137": {"area": 92,  "box": (830, 410, 915, 500)},
+    "AX-138": {"area": 91,  "box": (840, 475, 935, 565)},
+    "AX-139": {"area": 38,  "box": (875, 540, 955, 615)},
+    "AX-140": {"area": 38,  "box": (875, 595, 955, 670)},
+    "AX-141": {"area": 38,  "box": (875, 650, 955, 725)},
+    "AX-142": {"area": 38,  "box": (875, 700, 955, 780)},
+    "AX-143": {"area": 38,  "box": (875, 760, 955, 835)},
+    "AX-144": {"area": 38,  "box": (875, 810, 955, 890)},
+    "BX-101": {"area": 74,  "box": (330, 555, 460, 630)},
+    "BX-102": {"area": 83,  "box": (225, 540, 340, 620)},
+    "BX-103": {"area": 42,  "box": (210, 595, 300, 675)},
+    "BX-104": {"area": 42,  "box": (210, 650, 300, 725)},
+    "BX-105": {"area": 42,  "box": (210, 700, 300, 780)},
+    "BX-106": {"area": 42,  "box": (210, 755, 300, 835)},
+    "BX-107": {"area": 74,  "box": (210, 835, 305, 985)},
+    "BX-108": {"area": 71,  "box": (310, 860, 400, 985)},
+    "BX-109": {"area": 54,  "box": (335, 800, 425, 885)},
+    "BX-110": {"area": 55,  "box": (335, 750, 425, 830)},
 }
 
 def get_font(size):
@@ -79,7 +77,7 @@ def get_font(size):
             continue
     return ImageFont.load_default()
 
-def generate_sheet(unit_code, template_img, layout_pil, floor_text="First Floor"):
+def generate_sheet(unit_code, template_img, layout_pil):
     info = FIRST_FLOOR_UNITS[unit_code]
     lw, lh = layout_pil.size
     bx1, by1, bx2, by2 = info["box"]
@@ -90,63 +88,62 @@ def generate_sheet(unit_code, template_img, layout_pil, floor_text="First Floor"
     crop = layout_pil.crop((rx1, ry1, rx2, ry2))
     unit_img = crop.resize((crop.width * 2, crop.height * 2), Image.Resampling.BILINEAR)
     
-    canvas = template_img.copy().convert("RGB")
+    # تحجيم القالب لمقاس آمن تماماً وثابت (1240x1754 مناسب جداً وخفيف)
+    canvas = template_img.resize((1240, 1754), Image.Resampling.BILINEAR).convert("RGB")
     draw = ImageDraw.Draw(canvas)
     
-    # لصق الوحدة
+    # لصق الوحدة بمقاسات متوازنة
     uw, uh = unit_img.size
-    scale = min(1223 / uw, 1213 / uh)
+    scale = min(600 / uw, 600 / uh)
     new_w, new_h = int(uw * scale), int(uh * scale)
-    canvas.paste(unit_img.resize((new_w, new_h), Image.Resampling.BILINEAR), (1232 - new_w // 2, 1143 - new_h // 2))
+    canvas.paste(unit_img.resize((new_w, new_h), Image.Resampling.BILINEAR), (620 - new_w // 2, 570 - new_h // 2))
 
-    # Key plan
-    kp_scale = 931 / layout_pil.height
+    # Key plan مصغر وخفيف
+    kp_scale = 450 / layout_pil.height
     kp_resized = layout_pil.resize((int(layout_pil.width * kp_scale), int(layout_pil.height * kp_scale)), Image.Resampling.BILINEAR)
-    ImageDraw.Draw(kp_resized).rectangle([int(rx1 * kp_scale), int(ry1 * kp_scale), int(rx2 * kp_scale), int(ry2 * kp_scale)], outline=(217, 95, 108), width=3)
-    canvas.paste(kp_resized, (1244 - kp_resized.width // 2, 2261))
+    ImageDraw.Draw(kp_resized).rectangle([int(rx1 * kp_scale), int(ry1 * kp_scale), int(rx2 * kp_scale), int(ry2 * kp_scale)], outline=(217, 95, 108), width=2)
+    canvas.paste(kp_resized, (620 - kp_resized.width // 2, 1130))
 
-    # Footer data
-    font_main = get_font(52)
-    font_sup = get_font(34)
+    # كتابة بيانات الفوتر بمقاسات مناسبة للقالب الجديد
+    font_main = get_font(26)
+    font_sup = get_font(18)
     
-    draw.rectangle([1185, 3305, 1765, 3480], fill=WHITE_FILL)
+    draw.rectangle([590, 1650, 880, 1740], fill=WHITE_FILL)
     cb = font_main.getbbox(unit_code)
-    draw.text((1474 - (cb[2] - cb[0]) // 2, 3363), unit_code, fill=BLACK_LINE, font=font_main)
+    draw.text((735 - (cb[2] - cb[0]) // 2, 1680), unit_code, fill=BLACK_LINE, font=font_main)
 
-    draw.rectangle([1775, 3230, 2450, 3480], fill=WHITE_FILL)
+    draw.rectangle([890, 1610, 1220, 1740], fill=WHITE_FILL)
     a_str = f"{int(info['area'])}"
     txt_main = f"Gross area = {a_str} m"
     tb = font_main.getbbox(txt_main)
-    draw.text((2114 - (tb[2] - tb[0] + 20) // 2, 3325), txt_main, fill=BLACK_LINE, font=font_main)
-    draw.text((2114 + (tb[2] - tb[0]) // 2 - 15, 3319), "2", fill=BLACK_LINE, font=font_sup)
+    draw.text((1055 - (tb[2] - tb[0] + 15) // 2, 1660), txt_main, fill=BLACK_LINE, font=font_main)
+    draw.text((1055 + (tb[2] - tb[0]) // 2 - 10, 1655), "2", fill=BLACK_LINE, font=font_sup)
 
     return canvas
 
-st.title("🏢 Auto Contract Sheet Generator (Ultra Light)")
+st.title("🏢 Auto Contract Sheet Generator (Ultra Safe)")
 
 with st.sidebar:
-    up_layout = st.file_uploader("Layout Image", type=["jpg", "png"])
-    up_template = st.file_uploader("Template Image", type=["jpg", "png"])
-    floor_name = st.text_input("Floor Name", value="First Floor")
+    up_layout = st.file_uploader("Layout Image", type=["jpg", "png", "jpeg"])
+    up_template = st.file_uploader("Template Image", type=["jpg", "png", "jpeg"])
 
 if not up_layout or not up_template:
-    st.info("👈 أرجو رفع ملفات الـ Layout والـ Template من القائمة الجانبية.")
+    st.info("👈 أرجو رفع ملفات الـ Layout والـ Template من القائمة الجانبية للبدء.")
     st.stop()
 
+# ضغط وتجحيم الصور مباشرة عند رفعها لمنع الـ Crash نهائياً
 template_img = Image.open(up_template).convert("RGB")
 layout_pil = Image.open(up_layout).convert("RGB")
-if layout_pil.width > 1200:
-    layout_pil = layout_pil.resize((1200, int(1200 * layout_pil.height / layout_pil.width)), Image.Resampling.BILINEAR)
+if layout_pil.width > 1000:
+    layout_pil = layout_pil.resize((1000, int(1000 * layout_pil.height / layout_pil.width)), Image.Resampling.BILINEAR)
 
 selected_code = st.selectbox("اختر الكود:", list(FIRST_FLOOR_UNITS.keys()))
 
 if st.button("توليد وعرض اللوحة", type="primary"):
-    sheet = generate_sheet(selected_code, template_img, layout_pil, floor_name)
+    sheet = generate_sheet(selected_code, template_img, layout_pil)
     
-    # تصغير معاينة الصورة فقط على الشاشة لمنع استهلاك الرامات
-    preview_img = sheet.resize((600, int(600 * sheet.height / sheet.width)), Image.Resampling.BILINEAR)
-    st.image(preview_img, caption=selected_code)
+    st.image(sheet, caption=selected_code, use_container_width=True)
 
     buf = io.BytesIO()
     sheet.save(buf, format="JPEG", quality=85)
-    st.download_button("📥 تحميل اللوحة الأصلية بدقة عالية (JPG)", data=buf.getvalue(), file_name=f"{selected_code}.jpg", mime="image/jpeg")
+    st.download_button("📥 تحميل اللوحة (JPG)", data=buf.getvalue(), file_name=f"{selected_code}.jpg", mime="image/jpeg")
