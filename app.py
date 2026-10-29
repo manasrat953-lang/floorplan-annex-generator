@@ -1,17 +1,20 @@
 import streamlit as st
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+import cv2
+from PIL import Image, ImageDraw, ImageFont, ImageOps
+from scipy.ndimage import label, binary_fill_holes, binary_dilation, binary_erosion
 import io
-import math
+import zipfile
+import os
 
 st.set_page_config(
-    page_title="Contract Unit Sheet Generator | مولّد لوحات التعاقد",
-    page_icon="📐",
+    page_title="Auto Contract Sheet Generator | مولّد اللوحات التعاقدية الأوتوماتيكي",
+    page_icon="🏢",
     layout="wide"
 )
 
 # -------------------------------------------------------------
-# Constant Layout & Styling Parameters
+# Constant Colors & Styling
 # -------------------------------------------------------------
 PURPLE_FILL = (216, 190, 215)
 BLUE_FILL = (203, 230, 251)
@@ -21,67 +24,71 @@ BLACK_LINE = (0, 0, 0)
 WHITE_FILL = (255, 255, 255)
 RED_HIGHLIGHT = (217, 95, 108)
 
-# Preset Unit Configurations
-UNIT_PRESETS = {
-    "AX-101": {
-        "floor": "First Floor",
-        "area": 103,
-        "spill_out": 0,
-        "has_spill_out": False,
-        "keyplan_box": (850, 875, 962, 983),
-        "type": "preset_img",
-        "reference_crop": (850, 875, 962, 983)
-    },
-    "AX-102": {
-        "floor": "First Floor",
-        "area": 52,
-        "spill_out": 0,
-        "has_spill_out": False,
-        "keyplan_box": (799, 875, 853, 983),
-        "type": "preset_img",
-        "reference_crop": (799, 875, 853, 983)
-    },
-    "AX-103": {
-        "floor": "First Floor",
-        "area": 52,
-        "spill_out": 0,
-        "has_spill_out": False,
-        "keyplan_box": (745, 875, 800, 983),
-        "type": "preset_img",
-        "reference_crop": (745, 875, 800, 983)
-    },
-    "AX-104": {
-        "floor": "First Floor",
-        "area": 103,
-        "spill_out": 0,
-        "has_spill_out": False,
-        "keyplan_box": (638, 875, 748, 983),
-        "type": "mirror_101",
-        "reference_crop": (638, 875, 748, 983)
-    },
-    "AX-120": {
-        "floor": "First Floor",
-        "area": 39,
-        "spill_out": 0,
-        "has_spill_out": False,
-        "keyplan_box": (213, 377, 273, 461),
-        "type": "cad_ax120",
-        "reference_crop": (211, 367, 275, 462)
-    },
-    "BX-107": {
-        "floor": "First Floor",
-        "area": 74,
-        "spill_out": 20,
-        "has_spill_out": True,
-        "keyplan_box": (212, 824, 297, 986),
-        "type": "cad_bx107",
-        "reference_crop": (208, 820, 302, 990)
-    }
+# -------------------------------------------------------------
+# Complete Database of All 53 First-Floor Units (AX & BX)
+# Automatically maps every unit code to its exact location,
+# area, terrace/spill-out area, and category on the Floor Layout!
+# -------------------------------------------------------------
+FIRST_FLOOR_UNITS = {
+    "AX-101": {"area": 103, "spill": 0,  "type": "purple", "center": (905, 931)},
+    "AX-102": {"area": 52,  "spill": 0,  "type": "purple", "center": (825, 931)},
+    "AX-103": {"area": 52,  "spill": 0,  "type": "purple", "center": (774, 931)},
+    "AX-104": {"area": 103, "spill": 0,  "type": "purple", "center": (693, 931)},
+    "AX-105": {"area": 38,  "spill": 0,  "type": "purple", "center": (679, 851)},
+    "AX-106": {"area": 38,  "spill": 0,  "type": "purple", "center": (679, 799)},
+    "AX-107": {"area": 38,  "spill": 0,  "type": "purple", "center": (679, 746)},
+    "AX-108": {"area": 38,  "spill": 0,  "type": "purple", "center": (679, 693)},
+    "AX-109": {"area": 39,  "spill": 0,  "type": "purple", "center": (679, 640)},
+    "AX-110": {"area": 52,  "spill": 0,  "type": "purple", "center": (667, 588)},
+    "AX-111": {"area": 102, "spill": 0,  "type": "purple", "center": (710, 525)},
+    "AX-112": {"area": 103, "spill": 0,  "type": "purple", "center": (684, 462)},
+    "AX-113": {"area": 103, "spill": 0,  "type": "purple", "center": (635, 412)},
+    "AX-114": {"area": 104, "spill": 0,  "type": "purple", "center": (571, 386)},
+    "AX-115": {"area": 51,  "spill": 0,  "type": "purple", "center": (509, 430)},
+    "AX-116": {"area": 39,  "spill": 0,  "type": "purple", "center": (456, 418)},
+    "AX-117": {"area": 39,  "spill": 0,  "type": "purple", "center": (403, 418)},
+    "AX-118": {"area": 39,  "spill": 0,  "type": "purple", "center": (351, 418)},
+    "AX-119": {"area": 39,  "spill": 0,  "type": "purple", "center": (298, 418)},
+    "AX-120": {"area": 39,  "spill": 0,  "type": "purple", "center": (245, 418)},
+    "AX-121": {"area": 121, "spill": 0,  "type": "purple", "center": (159, 404)},
+    "AX-122": {"area": 61,  "spill": 0,  "type": "purple", "center": (159, 324)},
+    "AX-123": {"area": 61,  "spill": 0,  "type": "purple", "center": (159, 272)},
+    "AX-124": {"area": 121, "spill": 0,  "type": "purple", "center": (159, 191)},
+    "AX-125": {"area": 38,  "spill": 0,  "type": "purple", "center": (245, 177)},
+    "AX-126": {"area": 38,  "spill": 0,  "type": "purple", "center": (298, 178)},
+    "AX-127": {"area": 38,  "spill": 0,  "type": "purple", "center": (351, 177)},
+    "AX-128": {"area": 38,  "spill": 0,  "type": "purple", "center": (403, 178)},
+    "AX-129": {"area": 38,  "spill": 0,  "type": "purple", "center": (456, 177)},
+    "AX-130": {"area": 38,  "spill": 0,  "type": "purple", "center": (509, 177)},
+    "AX-131": {"area": 91,  "spill": 0,  "type": "purple", "center": (571, 207)},
+    "AX-132": {"area": 92,  "spill": 0,  "type": "purple", "center": (638, 221)},
+    "AX-133": {"area": 92,  "spill": 0,  "type": "purple", "center": (703, 248)},
+    "AX-134": {"area": 92,  "spill": 0,  "type": "purple", "center": (760, 287)},
+    "AX-135": {"area": 92,  "spill": 0,  "type": "purple", "center": (810, 336)},
+    "AX-136": {"area": 92,  "spill": 0,  "type": "purple", "center": (848, 394)},
+    "AX-137": {"area": 92,  "spill": 0,  "type": "purple", "center": (875, 458)},
+    "AX-138": {"area": 91,  "spill": 0,  "type": "purple", "center": (889, 525)},
+    "AX-139": {"area": 38,  "spill": 0,  "type": "purple", "center": (920, 588)},
+    "AX-140": {"area": 38,  "spill": 0,  "type": "purple", "center": (919, 640)},
+    "AX-141": {"area": 38,  "spill": 0,  "type": "purple", "center": (919, 693)},
+    "AX-142": {"area": 38,  "spill": 0,  "type": "purple", "center": (919, 746)},
+    "AX-143": {"area": 38,  "spill": 0,  "type": "purple", "center": (919, 799)},
+    "AX-144": {"area": 38,  "spill": 0,  "type": "purple", "center": (919, 851)},
+    "BX-101": {"area": 74,  "spill": 0,  "type": "blue",   "center": (374, 599)},
+    "BX-102": {"area": 83,  "spill": 0,  "type": "blue",   "center": (271, 586)},
+    "BX-103": {"area": 42,  "spill": 0,  "type": "blue",   "center": (256, 640)},
+    "BX-104": {"area": 42,  "spill": 0,  "type": "blue",   "center": (256, 693)},
+    "BX-105": {"area": 42,  "spill": 0,  "type": "blue",   "center": (256, 746)},
+    "BX-106": {"area": 42,  "spill": 0,  "type": "blue",   "center": (256, 799)},
+    "BX-107": {"area": 74,  "spill": 20, "type": "blue",   "center": (259, 875), "terrace_center": (270, 956), "terrace_label": "BX-107 Terrace"},
+    "BX-108": {"area": 71,  "spill": 24, "type": "blue",   "center": (363, 905), "terrace_center": (328, 959), "terrace_label": "BX-108 Terrace"},
+    "BX-109": {"area": 54,  "spill": 0,  "type": "blue",   "center": (380, 852)},
+    "BX-110": {"area": 55,  "spill": 0,  "type": "blue",   "center": (381, 798)},
 }
 
 
 def get_system_font(size):
-    """Fallback font loader for Linux/Windows/Mac."""
+    """Loads a clean Sans-Serif font across Linux/Windows/macOS."""
     font_candidates = [
         "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
@@ -97,167 +104,203 @@ def get_system_font(size):
     return ImageFont.load_default()
 
 
-def render_ax120_cad():
-    """Generates a crisp high-res CAD graphic for unit AX-120."""
-    S = 12
-    W, H = 64 * S, 96 * S
-    im = Image.new("RGB", (W, H), WHITE_FILL)
-    d = ImageDraw.Draw(im)
-    LW = 4
+@st.cache_data
+def segment_floor_layout(arr_layout: np.ndarray):
+    """
+    Automatically segments the floor layout image into distinct unit polygons
+    (Purple Clinics, Blue Offices, Green Terraces) using connected components.
+    """
+    arr = arr_layout.copy()
+    # Mask out top-left Room Legend if present
+    h, w = arr.shape[:2]
+    arr[0:int(h * 0.145), 0:int(w * 0.086), :] = 255
 
-    def rx(c): return int((c - 212) * S)
-    def ry(r): return int((r - 367) * S)
+    purple_mask = (
+        ((arr[:, :, 0].astype(int) - arr[:, :, 1].astype(int)) > 16)
+        & ((arr[:, :, 2].astype(int) - arr[:, :, 1].astype(int)) > 16)
+        & (arr[:, :, 0] > 185)
+    )
+    blue_mask = (
+        ((arr[:, :, 2].astype(int) - arr[:, :, 0].astype(int)) > 25)
+        & ((arr[:, :, 1].astype(int) - arr[:, :, 0].astype(int)) > 10)
+        & (arr[:, :, 2] > 215)
+    )
+    green_mask = (
+        ((arr[:, :, 1].astype(int) - arr[:, :, 2].astype(int)) > 12)
+        & ((arr[:, :, 1].astype(int) - arr[:, :, 0].astype(int)) > 6)
+        & (arr[:, :, 1] > 235)
+    )
 
-    # 1. Fill interior
-    d.rectangle([rx(220), ry(379), rx(270), ry(457)], fill=PURPLE_FILL)
+    labeled_p, _ = label(purple_mask)
+    labeled_b, _ = label(blue_mask)
+    labeled_g, _ = label(green_mask)
+    all_units_mask = purple_mask | blue_mask | green_mask
 
-    # 2. Bottom wall
-    d.rectangle([rx(220), ry(457) - LW, rx(272), ry(457) + LW], fill=BLACK_LINE)
-
-    # 3. L-shaped Top & Left Wall
-    tl_poly = [
-        (rx(217), ry(368)), (rx(220), ry(368)), (rx(220), ry(377)),
-        (rx(256.5), ry(377)), (rx(256.5), ry(380)), (rx(220), ry(380)),
-        (rx(220), ry(439)), (rx(217), ry(439))
-    ]
-    d.polygon(tl_poly, fill=GRAY_WALL)
-    d.line(tl_poly + [tl_poly[0]], fill=BLACK_LINE, width=LW, joint="curve")
-
-    # 4. Shaft & Column
-    d.rectangle([rx(213), ry(439), rx(220), ry(448)], fill=GRAY_WALL, outline=BLACK_LINE, width=LW)
-    d.rectangle([rx(214.3), ry(440.3), rx(218.7), ry(446.7)], fill=WHITE_FILL, outline=BLACK_LINE, width=LW)
-    d.rectangle([rx(213), ry(448), rx(220), ry(461)], fill=GRAY_WALL, outline=BLACK_LINE, width=LW)
-
-    # 5. Right Wall
-    r_poly = [
-        (rx(268.5), ry(377)), (rx(273), ry(377)), (rx(273), ry(457)),
-        (rx(270), ry(457)), (rx(270), ry(380)), (rx(268.5), ry(380))
-    ]
-    d.polygon(r_poly, fill=GRAY_WALL)
-    d.line(r_poly + [r_poly[0]], fill=BLACK_LINE, width=LW, joint="curve")
-
-    # 6. Top Entrance Door
-    door_r = rx(268.5) - rx(256.5)
-    d.rectangle([rx(268.5) - 10, ry(380), rx(268.5), ry(380) + door_r], fill=WHITE_FILL, outline=BLACK_LINE, width=2)
-    d.arc([rx(268.5) - door_r, ry(380) - door_r, rx(268.5) + door_r, ry(380) + door_r], start=90, end=180, fill=BLACK_LINE, width=2)
-
-    # 7. Code text
-    f_unit = get_system_font(44)
-    bbox = f_unit.getbbox("AX-120")
-    w_t, h_t = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    cx = (rx(220) + rx(270)) // 2
-    cy = (ry(380) + ry(457)) // 2
-    d.text((cx - w_t // 2, cy - h_t // 2), "AX-120", fill=BLACK_LINE, font=f_unit)
-
-    return im
+    return arr, labeled_p, labeled_b, labeled_g, all_units_mask
 
 
-def render_bx107_cad():
-    """Generates a crisp high-res CAD graphic for unit BX-107 + Terrace."""
-    S = 10
-    W, H = 94 * S, 172 * S
-    im = Image.new("RGB", (W, H), WHITE_FILL)
-    d = ImageDraw.Draw(im)
-    LW = 4
-
-    def rx(c): return int((c - 208) * S)
-    def ry(r): return int((r - 820) * S)
-
-    cx_b, cy_b, R_b = 276.0, 874.5, 58.0
-
-    # 1. Terrace polygon (Green)
-    terrace_pts = [(rx(243), ry(969)), (rx(243), ry(922.5))]
-    for c_val in np.linspace(243, 276, 30):
-        dx_v = c_val - cx_b
-        dy_v = math.sqrt(max(0, R_b**2 - dx_v**2))
-        terrace_pts.append((rx(c_val), ry(cy_b + dy_v)))
-    terrace_pts.extend([(rx(296), ry(932.5)), (rx(296), ry(985.5)), (rx(273), ry(985.5))])
-    for t in np.linspace(0, 1, 25):
-        c_val = (1 - t)**2 * 273 + 2 * (1 - t) * t * 255 + t**2 * 243
-        r_val = (1 - t)**2 * 985.5 + 2 * (1 - t) * t * 983 + t**2 * 969
-        terrace_pts.append((rx(c_val), ry(r_val)))
-
-    d.polygon(terrace_pts, fill=GREEN_FILL)
-    d.line(terrace_pts + [terrace_pts[0]], fill=BLACK_LINE, width=LW, joint="curve")
-
-    # 2. BX-107 interior polygon (Blue)
-    bx_pts = [
-        (rx(217.5), ry(826.5)),
-        (rx(294.5), ry(826.5)),
-        (rx(294.5), ry(932.5)),
-        (rx(276.0), ry(932.5))
-    ]
-    for c_val in np.linspace(276.0, 218.5, 50):
-        dx_v = c_val - cx_b
-        dy_v = math.sqrt(max(0, R_b**2 - dx_v**2))
-        bx_pts.append((rx(c_val), ry(cy_b + dy_v)))
-    bx_pts.append((rx(217.5), ry(882.0)))
-
-    d.polygon(bx_pts, fill=BLUE_FILL)
-    d.line(bx_pts + [bx_pts[0]], fill=BLACK_LINE, width=LW, joint="curve")
-
-    # 3. Walls, columns, doors
-    d.rectangle([rx(217.5), ry(824), rx(296.5), ry(826.5)], fill=GRAY_WALL, outline=BLACK_LINE, width=LW)
-    d.rectangle([rx(294.5), ry(826.5), rx(297.5), ry(829)], fill=GRAY_WALL, outline=BLACK_LINE, width=LW)
-    d.rectangle([rx(294.5), ry(840), rx(297.5), ry(932.5)], fill=GRAY_WALL, outline=BLACK_LINE, width=LW)
-
-    door1_r = rx(294.5) - rx(283.5)
-    d.rectangle([rx(283.5), ry(829), rx(294.5), ry(829) + 8], fill=WHITE_FILL, outline=BLACK_LINE, width=2)
-    d.arc([rx(294.5) - door1_r, ry(829) - door1_r, rx(294.5) + door1_r, ry(829) + door1_r], start=90, end=180, fill=BLACK_LINE, width=2)
-
-    col_left_poly = [
-        (rx(214.5), ry(862)), (rx(217.5), ry(862)), (rx(217.5), ry(874)),
-        (rx(238.0), ry(874)), (rx(238.0), ry(882)), (rx(212.0), ry(882)),
-        (rx(212.0), ry(870)), (rx(214.5), ry(870))
-    ]
-    d.polygon(col_left_poly, fill=GRAY_WALL)
-    d.line(col_left_poly + [col_left_poly[0]], fill=BLACK_LINE, width=LW, joint="curve")
-    d.rectangle([rx(230), ry(875.5), rx(236.5), ry(880.5)], fill=WHITE_FILL, outline=BLACK_LINE, width=LW)
-    d.rectangle([rx(273), ry(985.5), rx(280), ry(990)], fill=GRAY_WALL, outline=BLACK_LINE, width=LW)
-
-    door2_r = rx(292) - rx(282)
-    d.line([(rx(282), ry(932.5)), (rx(292), ry(932.5))], fill=GREEN_FILL, width=LW + 2)
-    d.rectangle([rx(292) - 8, ry(932.5), rx(292), ry(932.5) + door2_r], fill=WHITE_FILL, outline=BLACK_LINE, width=2)
-    d.arc([rx(292) - door2_r, ry(932.5) - door2_r, rx(292) + door2_r, ry(932.5) + door2_r], start=90, end=180, fill=BLACK_LINE, width=2)
-
-    f_u = get_system_font(42)
-    f_t = get_system_font(28)
-    ub = f_u.getbbox("BX-107")
-    d.text((rx(258) - (ub[2] - ub[0]) // 2, ry(870)), "BX-107", fill=BLACK_LINE, font=f_u)
-    tb = f_t.getbbox("BX-107 Terrace")
-    d.text((rx(269) - (tb[2] - tb[0]) // 2, ry(956)), "BX-107 Terrace", fill=BLACK_LINE, font=f_t)
-
-    return im
+def find_component_at(lbl_arr: np.ndarray, cx: int, cy: int, scale_x: float = 1.0, scale_y: float = 1.0):
+    """Finds the component ID around scaled coordinates (cx, cy)."""
+    sx, sy = int(cx * scale_x), int(cy * scale_y)
+    r = max(10, int(10 * max(scale_x, scale_y)))
+    win = lbl_arr[max(0, sy - r):min(lbl_arr.shape[0], sy + r + 1), max(0, sx - r):min(lbl_arr.shape[1], sx + r + 1)]
+    vals = win[win > 0]
+    if len(vals) == 0:
+        return 0
+    return int(np.bincount(vals).argmax())
 
 
-def generate_contract_sheet(
-    template_img: Image.Image,
-    layout_img: Image.Image,
-    unit_img: Image.Image,
+def isolate_and_upscale_unit(
+    arr_clean: np.ndarray,
+    comp_mask: np.ndarray,
+    all_units_mask: np.ndarray,
+    fill_rgb: tuple,
     unit_code: str,
-    area_val: float,
-    spill_out_val: float,
-    has_spill_out: bool,
-    keyplan_box: tuple,
-    floor_text: str = "First Floor"
+    terrace_mask: np.ndarray = None,
+    terrace_code: str = None,
+    clean_cad_mode: bool = True
 ) -> Image.Image:
-    """Builds the final composite high-res sheet matching company standards."""
+    """
+    Automatically isolates a single unit (plus optional terrace) from the floor layout,
+    removes neighboring units & corridor backgrounds, cleans interior text,
+    and upscales to a crisp high-resolution CAD diagram.
+    """
+    filled = binary_fill_holes(comp_mask)
+    ys, xs = np.where(filled)
+    cx, cy = int(np.mean(xs)), int(np.mean(ys))
+
+    total_mask = filled.copy()
+    if terrace_mask is not None:
+        t_filled = binary_fill_holes(terrace_mask)
+        total_mask = total_mask | t_filled
+
+    tys, txs = np.where(total_mask)
+    margin = 8
+    x1 = max(0, int(txs.min()) - margin)
+    y1 = max(0, int(tys.min()) - margin)
+    x2 = min(arr_clean.shape[1], int(txs.max()) + margin + 1)
+    y2 = min(arr_clean.shape[0], int(tys.max()) + margin + 1)
+
+    sub = arr_clean[y1:y2, x1:x2].copy()
+    if not clean_cad_mode:
+        return Image.fromarray(sub)
+
+    sub_unit = filled[y1:y2, x1:x2]
+    sub_total = total_mask[y1:y2, x1:x2]
+    sub_other = (all_units_mask[y1:y2, x1:x2]) & (~sub_total)
+
+    # Keep structural walls/columns/shafts belonging to this unit (within 6px)
+    keep_zone = binary_dilation(sub_total, iterations=6)
+    is_corridor = (sub[:, :, 0] > 228) & (sub[:, :, 1] > 228) & (sub[:, :, 2] > 225) & (~sub_total)
+
+    sub[~keep_zone] = [255, 255, 255]
+    sub[sub_other] = [255, 255, 255]
+    sub[is_corridor] = [255, 255, 255]
+
+    # Replace low-res text inside the unit interior while preserving door swing arcs near walls
+    eroded_deep = binary_erosion(sub_unit, iterations=12)
+    lcx, lcy = cx - x1, cy - y1
+    text_box = np.zeros_like(sub_unit)
+    text_box[max(0, lcy - 18):min(sub.shape[0], lcy + 18), max(0, lcx - 28):min(sub.shape[1], lcx + 28)] = True
+    sub[(eroded_deep | text_box) & sub_unit] = fill_rgb
+
+    if terrace_mask is not None:
+        sub_terr = binary_fill_holes(terrace_mask)[y1:y2, x1:x2]
+        ty_s, tx_s = np.where(sub_terr)
+        tcx, tcy = int(np.mean(tx_s)), int(np.mean(ty_s))
+        t_box = np.zeros_like(sub_terr)
+        t_box[max(0, tcy - 15):min(sub.shape[0], tcy + 15), max(0, tcx - 26):min(sub.shape[1], tcx + 26)] = True
+        sub[t_box & sub_terr] = GREEN_FILL
+
+    # High-res 8x Lanczos upscaling + unsharp mask for crisp CAD lines
+    scale = 8
+    h_s, w_s = sub.shape[:2]
+    up = cv2.resize(sub, (w_s * scale, h_s * scale), interpolation=cv2.INTER_LANCZOS4)
+    blur = cv2.GaussianBlur(up, (0, 0), 2.0)
+    up_sharp = cv2.addWeighted(up, 1.8, blur, -0.8, 0)
+
+    im_up = Image.fromarray(up_sharp)
+    draw = ImageDraw.Draw(im_up)
+    f_u = get_system_font(38)
+    ub = f_u.getbbox(unit_code)
+    tw, th = ub[2] - ub[0], ub[3] - ub[1]
+    draw.text((lcx * scale - tw // 2, lcy * scale - th // 2), unit_code, fill=BLACK_LINE, font=f_u)
+
+    if terrace_mask is not None and terrace_code:
+        f_t = get_system_font(24)
+        tb = f_t.getbbox(terrace_code)
+        ttw, tth = tb[2] - tb[0], tb[3] - tb[1]
+        draw.text((tcx * scale - ttw // 2, tcy * scale - tth // 2), terrace_code, fill=BLACK_LINE, font=f_t)
+
+    return im_up
+
+
+def generate_sheet_for_unit(
+    unit_code: str,
+    template_img: Image.Image,
+    arr_clean: np.ndarray,
+    labeled_p: np.ndarray,
+    labeled_b: np.ndarray,
+    labeled_g: np.ndarray,
+    all_units_mask: np.ndarray,
+    floor_text: str = "First Floor",
+    area_override: float = None,
+    spill_override: float = None,
+    clean_cad_mode: bool = True,
+    custom_unit_img: Image.Image = None
+) -> Image.Image:
+    """Generates the complete 2480x3508 contract sheet for any selected unit code."""
+    info = FIRST_FLOOR_UNITS[unit_code]
+    area_val = float(area_override) if area_override is not None else float(info["area"])
+    spill_val = float(spill_override) if spill_override is not None else float(info["spill"])
+
+    h_lay, w_lay = arr_clean.shape[:2]
+    sx, sy = w_lay / 998.0, h_lay / 1024.0
+
+    lbl_arr = labeled_p if info["type"] == "purple" else labeled_b
+    fill_rgb = PURPLE_FILL if info["type"] == "purple" else BLUE_FILL
+
+    comp_id = find_component_at(lbl_arr, info["center"][0], info["center"][1], sx, sy)
+    comp_mask = (lbl_arr == comp_id)
+
+    terrace_mask = None
+    terrace_label = info.get("terrace_label")
+    if "terrace_center" in info and spill_val > 0:
+        t_id = find_component_at(labeled_g, info["terrace_center"][0], info["terrace_center"][1], sx, sy)
+        if t_id > 0:
+            terrace_mask = (labeled_g == t_id)
+
+    # 1. Get Top Unit Graphic
+    if custom_unit_img is not None:
+        unit_img = custom_unit_img.convert("RGB")
+    else:
+        unit_img = isolate_and_upscale_unit(
+            arr_clean=arr_clean,
+            comp_mask=comp_mask,
+            all_units_mask=all_units_mask,
+            fill_rgb=fill_rgb,
+            unit_code=unit_code,
+            terrace_mask=terrace_mask,
+            terrace_code=terrace_label,
+            clean_cad_mode=clean_cad_mode
+        )
+
+    # 2. Prepare Template Canvas
     canvas = template_img.copy().convert("RGB")
     draw = ImageDraw.Draw(canvas)
-
     font_main = get_system_font(52)
     font_sup = get_system_font(34)
     font_floor = get_system_font(58)
 
-    # 1. Update Floor Name Header if modified
-    # Erase old floor title box (x: 950..1550, y: 35..130)
-    draw.rectangle([950, 35, 1550, 130], fill=WHITE_FILL)
-    fb = font_floor.getbbox(floor_text)
-    fw = fb[2] - fb[0]
-    draw.text((1240 - fw // 2, 45), floor_text, fill=BLACK_LINE, font=font_floor)
-    draw.line([(1240 - fw // 2, 105), (1240 + fw // 2, 105)], fill=BLACK_LINE, width=3)
+    # Update Floor Title if changed
+    if floor_text.strip() != "First Floor":
+        draw.rectangle([950, 35, 1550, 130], fill=WHITE_FILL)
+        fb = font_floor.getbbox(floor_text)
+        fw = fb[2] - fb[0]
+        draw.text((1240 - fw // 2, 45), floor_text, fill=BLACK_LINE, font=font_floor)
+        draw.line([(1240 - fw // 2, 105), (1240 + fw // 2, 105)], fill=BLACK_LINE, width=3)
 
-    # 2. Paste Unit Plan in Upper Center Section
+    # Paste Top Unit Plan
     uw, uh = unit_img.size
     max_w, max_h = 1223, 1213
     scale = min(max_w / uw, max_h / uh)
@@ -265,59 +308,60 @@ def generate_contract_sheet(
     u_resized = unit_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
     canvas.paste(u_resized, (1232 - new_w // 2, 1143 - new_h // 2))
 
-    # 3. Process Key Plan with Red Highlight
-    arr_lay = np.array(layout_img.convert("RGB"))
-    # Mask out Room Legend top-left corner
-    arr_lay[0:145, 0:85, :] = 255
+    # 3. Highlight Exact Unit Polygon on Key Plan
+    arr_k = arr_clean.copy()
+    highlight_poly = binary_fill_holes(comp_mask)
+    if terrace_mask is not None:
+        highlight_poly = highlight_poly | binary_fill_holes(terrace_mask)
+    # Dilate by 2px so surrounding wall borders of the selected unit also tint cleanly like reference AX-101
+    highlight_poly = binary_dilation(highlight_poly, iterations=2)
 
-    x1, y1, x2, y2 = keyplan_box
-    # Constrain highlight within layout bounds
-    x1, x2 = max(0, x1), min(arr_lay.shape[1], x2)
-    y1, y2 = max(0, y1), min(arr_lay.shape[0], y2)
-
-    region = arr_lay[y1:y2, x1:x2].astype(float)
+    ys_h, xs_h = np.where(highlight_poly)
+    hx1, hy1, hx2, hy2 = xs_h.min(), ys_h.min(), xs_h.max() + 1, ys_h.max() + 1
+    region = arr_k[hy1:hy2, hx1:hx2].astype(float)
+    sub_poly = highlight_poly[hy1:hy2, hx1:hx2]
     not_white = ~((region[:, :, 0] > 240) & (region[:, :, 1] > 240) & (region[:, :, 2] > 240))
+    active = sub_poly & not_white
 
     lum = (0.299 * region[:, :, 0] + 0.587 * region[:, :, 1] + 0.114 * region[:, :, 2]) / 230.0
     lum = np.clip(lum, 0, 1.05)
 
-    region[:, :, 0] = np.where(not_white, np.clip(217 * lum, 0, 255), region[:, :, 0])
-    region[:, :, 1] = np.where(not_white, np.clip(95 * lum, 0, 255), region[:, :, 1])
-    region[:, :, 2] = np.where(not_white, np.clip(108 * lum, 0, 255), region[:, :, 2])
-    arr_lay[y1:y2, x1:x2] = region.astype(np.uint8)
+    region[:, :, 0] = np.where(active, np.clip(217 * lum, 0, 255), region[:, :, 0])
+    region[:, :, 1] = np.where(active, np.clip(95 * lum, 0, 255), region[:, :, 1])
+    region[:, :, 2] = np.where(active, np.clip(108 * lum, 0, 255), region[:, :, 2])
+    arr_k[hy1:hy2, hx1:hx2] = region.astype(np.uint8)
 
-    # Crop building footprint from layout
-    kp_crop = Image.fromarray(arr_lay[100:1022, 90:998])
+    kp_crop = Image.fromarray(arr_k[int(100 * sy):int(1022 * sy), int(90 * sx):int(998 * sx)])
     kw, kh = kp_crop.size
     kp_scale = 931 / kh
     kp_w, kp_h = int(kw * kp_scale), int(kh * kp_scale)
     kp_resized = kp_crop.resize((kp_w, kp_h), Image.Resampling.LANCZOS)
     canvas.paste(kp_resized, (1244 - kp_w // 2, 2261))
 
-    # 4. Title Block: Unit Code
+    # 4. Update Title Block: Unit Code & Area
     draw.rectangle([1185, 3305, 1765, 3480], fill=WHITE_FILL)
-    code_bbox = font_main.getbbox(unit_code)
-    cw = code_bbox[2] - code_bbox[0]
+    cb = font_main.getbbox(unit_code)
+    cw = cb[2] - cb[0]
     draw.text((1474 - cw // 2, 3363), unit_code, fill=BLACK_LINE, font=font_main)
 
-    # 5. Title Block: Area Values
     draw.rectangle([1775, 3230, 2450, 3480], fill=WHITE_FILL)
-    if has_spill_out and spill_out_val > 0:
-        # Two-line format (Area + Spill Out Area)
-        l1 = f"Area = {int(area_val) if area_val.is_integer() else area_val} m"
+    a_str = f"{int(area_val)}" if area_val.is_integer() else f"{area_val}"
+    s_str = f"{int(spill_val)}" if spill_val.is_integer() else f"{spill_val}"
+
+    if spill_val > 0:
+        l1 = f"Area = {a_str} m"
         tb1 = font_main.getbbox(l1)
         tw1 = tb1[2] - tb1[0]
         draw.text((1821, 3285), l1, fill=BLACK_LINE, font=font_main)
         draw.text((1821 + tw1 + 2, 3285 - 6), "2", fill=BLACK_LINE, font=font_sup)
 
-        l2 = f"Spill Out Area = {int(spill_out_val) if spill_out_val.is_integer() else spill_out_val} m"
+        l2 = f"Spill Out Area = {s_str} m"
         tb2 = font_main.getbbox(l2)
         tw2 = tb2[2] - tb2[0]
         draw.text((1821, 3367), l2, fill=BLACK_LINE, font=font_main)
         draw.text((1821 + tw2 + 2, 3367 - 6), "2", fill=BLACK_LINE, font=font_sup)
     else:
-        # Single-line format (Gross area = XX m²)
-        txt_main = f"Gross area = {int(area_val) if area_val.is_integer() else area_val} m"
+        txt_main = f"Gross area = {a_str} m"
         tb = font_main.getbbox(txt_main)
         tw = tb[2] - tb[0]
         sb = font_sup.getbbox("2")
@@ -330,145 +374,168 @@ def generate_contract_sheet(
     return canvas
 
 
+def load_default_or_uploaded(uploaded_file, default_filenames):
+    """Loads an image from Streamlit uploader or falls back to repo files."""
+    if uploaded_file is not None:
+        return Image.open(uploaded_file).convert("RGB")
+    for fname in default_filenames:
+        if os.path.exists(fname):
+            return Image.open(fname).convert("RGB")
+    return None
+
+
 # -------------------------------------------------------------
-# Streamlit Web App Interface
+# Main Streamlit UI
 # -------------------------------------------------------------
-st.title("📐 نظام توليد لوحات التعاقد الهندسية (Unit Sheet Generator)")
-st.caption("أداة متكاملة لتركيب لوحات الوحدات العقارية وتظليل الـ Key Plan تلقائياً بدقة الطباعة الرسمية")
-
-# Sidebar: Template and Floor Layout Setup
-st.sidebar.header("⚙️ إعدادات النموذج والمخطط العام")
-uploaded_template = st.sidebar.file_uploader("1. قالب اللوحة الأساسي (MAIN TEMPALTE)", type=["jpg", "png", "jpeg"])
-uploaded_layout = st.sidebar.file_uploader("2. مخطط الدور الإجمالي (Layout With Areas)", type=["jpg", "png", "jpeg"])
-
-floor_name = st.sidebar.text_input("اسم الدور (Floor Name)", value="First Floor")
-
-st.sidebar.markdown("---")
-st.sidebar.header("🏢 إعدادات الوحدة المطلوب توليدها")
-
-selected_preset = st.sidebar.selectbox(
-    "اختر وحدة جاهزة من القائمة أو حدد تخصيص يدوي:",
-    ["تخصيص يدوي (Custom)"] + list(UNIT_PRESETS.keys())
+st.title("🏢 المولّد الأوتوماتيكي للوحات الوحدات التعاقدية (Auto Unit Sheet Generator)")
+st.markdown(
+    "ارفع **مخطط الدور (Layout)** فقط (أو استخدم المخطط المدمج)، وسيقوم البرنامج **أوتوماتيكياً** بقص الوحدة، تنظيفها، تظليل مكانها على الـ Key Plan، وكتابة الكود والمساحة بدون أي إدخال يدوي!"
 )
 
-if selected_preset != "تخصيص يدوي (Custom)":
-    preset_data = UNIT_PRESETS[selected_preset]
-    unit_code = st.sidebar.text_input("كود الوحدة (Unit Code)", value=selected_preset)
-    unit_area = st.sidebar.number_input("المساحة الإجمالية (Gross Area m²)", value=float(preset_data["area"]), step=1.0)
-    has_spill_out = st.sidebar.checkbox("تحتوي على تراس / Spill Out Area؟", value=preset_data["has_spill_out"])
-    spill_out_area = 0.0
-    if has_spill_out:
-        spill_out_area = st.sidebar.number_input("مساحة التراس (Spill Out Area m²)", value=float(preset_data["spill_out"]), step=1.0)
-    keyplan_box = preset_data["keyplan_box"]
-    render_type = preset_data["type"]
-else:
-    unit_code = st.sidebar.text_input("كود الوحدة (Unit Code)", value="AX-105")
-    unit_area = st.sidebar.number_input("المساحة الإجمالية (Gross Area m²)", value=92.0, step=1.0)
-    has_spill_out = st.sidebar.checkbox("تحتوي على تراس / Spill Out Area؟", value=False)
-    spill_out_area = 0.0
-    if has_spill_out:
-        spill_out_area = st.sidebar.number_input("مساحة التراس (Spill Out Area m²)", value=0.0, step=1.0)
-    render_type = "upload_or_crop"
+with st.sidebar:
+    st.header("📂 1. ملفات المخطط والقالب")
+    up_layout = st.file_uploader("ارفع مخطط الدور (Layout With Areas)", type=["jpg", "jpeg", "png"])
+    up_template = st.file_uploader("اختياري: قالب اللوحة الفارغ (MAIN TEMPALTE)", type=["jpg", "jpeg", "png"])
+    floor_name = st.text_input("اسم الدور (Floor Title)", value="First Floor")
+    clean_cad_mode = st.toggle("تنظيف وتكبير رسمة الوحدة تلقائياً (Auto-Clean CAD)", value=True)
 
-    st.sidebar.subheader("إحداثيات تظليل الوحدة في المخطط (Key Plan Box)")
-    col_k1, col_k2 = st.sidebar.columns(2)
-    kp_x1 = col_k1.number_input("X1 (يسار)", value=800, step=5)
-    kp_y1 = col_k2.number_input("Y1 (أعلى)", value=850, step=5)
-    kp_x2 = col_k1.number_input("X2 (يمين)", value=900, step=5)
-    kp_y2 = col_k2.number_input("Y2 (أسفل)", value=980, step=5)
-    keyplan_box = (int(kp_x1), int(kp_y1), int(kp_x2), int(kp_y2))
+template_img = load_default_or_uploaded(up_template, [
+    "MAIN TEMPALTE.jpg",
+    "user_uploaded_files/ttl=63d/user_uploaded/MAIN TEMPALTE.jpg"
+])
+layout_img = load_default_or_uploaded(up_layout, [
+    "ETAJE-AX-BX-01-FIRST FLOOR - WITH AREA.jpg",
+    "user_uploaded_files/ttl=63d/user_uploaded/ETAJE-AX-BX-01-FIRST FLOOR - WITH AREA.jpg"
+])
 
-uploaded_unit_img = st.file_uploader("📂 اختياري: رفع صورة المسقط المنفصل للوحدة (Unit Plan Image)", type=["jpg", "png", "jpeg"])
+if template_img is None or layout_img is None:
+    st.info("👈 يرجى رفع ملف **مخطط الدور (Layout)** وملف **القالب (MAIN TEMPALTE)** من القائمة الجانبية للبدء (أو وضعهما في نفس مجلد `app.py` على GitHub ليعمل البرنامج بدون رفع في كل مرة).")
+    st.stop()
 
-# Action Button
-if st.button("🚀 توليد اللوحة الهندسية الآن (Generate Sheet)", type="primary"):
-    # Load Template
-    if uploaded_template is not None:
-        template_img = Image.open(uploaded_template)
-    else:
-        # Fallback to local default if running in repo with local assets
-        try:
-            template_img = Image.open("MAIN TEMPALTE.jpg")
-        except Exception:
-            st.error("يرجى رفع صورة القالب الأساسي MAIN TEMPALTE.jpg من الشريط الجانبي.")
-            st.stop()
+# Automatically segment all 53 units from the layout image
+arr_clean, labeled_p, labeled_b, labeled_g, all_units_mask = segment_floor_layout(np.array(layout_img))
 
-    # Load Floor Layout
-    if uploaded_layout is not None:
-        layout_img = Image.open(uploaded_layout)
-    else:
-        try:
-            layout_img = Image.open("ETAJE-AX-BX-01-FIRST FLOOR - WITH AREA.jpg")
-        except Exception:
-            st.error("يرجى رفع صورة مخطط الدور الإجمالي Layout With Areas من الشريط الجانبي.")
-            st.stop()
+tab_single, tab_batch = st.tabs([
+    "🎯 توليد لوحة وحدة (باختيار الكود فقط)",
+    "📦 توليد جميع وحدات الدور دفعة واحدة (Batch ZIP / PDF)"
+])
 
-    # Determine Unit Plan Image
-    if uploaded_unit_img is not None:
-        unit_img = Image.open(uploaded_unit_img)
-    elif selected_preset != "تخصيص يدوي (Custom)":
-        if render_type == "cad_ax120":
-            unit_img = render_ax120_cad()
-        elif render_type == "cad_bx107":
-            unit_img = render_bx107_cad()
-        elif render_type == "mirror_101":
-            try:
-                u101 = Image.open("101.jpg").convert("RGB")
-                draw_101 = ImageDraw.Draw(u101)
-                draw_101.rectangle([380, 460, 560, 515], fill=PURPLE_FILL)
-                unit_img = ImageOps.mirror(u101)
-                d104 = ImageDraw.Draw(unit_img)
-                f_u = get_system_font(45)
-                ub = f_u.getbbox("AX-104")
-                d104.text((512 - (ub[2] - ub[0]) // 2, 462), "AX-104", fill=BLACK_LINE, font=f_u)
-            except Exception:
-                unit_img = layout_img.crop(UNIT_PRESETS["AX-104"]["reference_crop"])
-        else:
-            # Check local file or crop from layout
-            unit_file = f"{selected_preset.split('-')[-1]}.jpg"
-            try:
-                unit_img = Image.open(unit_file)
-            except Exception:
-                unit_img = layout_img.crop(preset_data["reference_crop"])
-    else:
-        # Crop directly from layout using provided box
-        unit_img = layout_img.crop(keyplan_box)
+with tab_single:
+    col_ctrl, col_preview = st.columns([1, 2])
+    with col_ctrl:
+        st.subheader("اختر كود الوحدة")
+        all_codes = list(FIRST_FLOOR_UNITS.keys())
+        selected_code = st.selectbox("كود الوحدة (54 وحدة مسجلة تلقائياً):", all_codes, index=all_codes.index("AX-120"))
 
-    with st.spinner("جاري معالجة وتركيب اللوحة الهندسية عالية الدقة..."):
-        result_sheet = generate_contract_sheet(
+        u_info = FIRST_FLOOR_UNITS[selected_code]
+        st.caption(f"**المساحة المسجلة تلقائياً:** `{u_info['area']} m²`" + (f" | **التراس:** `{u_info['spill']} m²`" if u_info['spill'] > 0 else ""))
+
+        with st.expander("تعديل يدوي اختياري (في حال الرغبة بتغيير المساحة أو رفع صورة مخصصة)"):
+            area_ov = st.number_input("تعديل المساحة (m²)", value=float(u_info["area"]), step=1.0)
+            spill_ov = st.number_input("تعديل مساحة التراس / Spill Out (m²)", value=float(u_info["spill"]), step=1.0)
+            custom_u_file = st.file_uploader("رفع رسمة منفصلة لهذه الوحدة (اختياري)", type=["jpg", "jpeg", "png"])
+            custom_u_img = Image.open(custom_u_file) if custom_u_file else None
+
+        sheet_img = generate_sheet_for_unit(
+            unit_code=selected_code,
             template_img=template_img,
-            layout_img=layout_img,
-            unit_img=unit_img,
-            unit_code=unit_code,
-            area_val=unit_area,
-            spill_out_val=spill_out_area,
-            has_spill_out=has_spill_out,
-            keyplan_box=keyplan_box,
-            floor_text=floor_name
+            arr_clean=arr_clean,
+            labeled_p=labeled_p,
+            labeled_b=labeled_b,
+            labeled_g=labeled_g,
+            all_units_mask=all_units_mask,
+            floor_text=floor_name,
+            area_override=area_ov,
+            spill_override=spill_ov,
+            clean_cad_mode=clean_cad_mode,
+            custom_unit_img=custom_u_img
         )
 
-        st.success(f"تم إنشاء لوحة الوحدة {unit_code} بنجاح!")
-        st.image(result_sheet, caption=f"لوحة تعاقدية - {unit_code} ({floor_name})", use_container_width=True)
-
-        # Download Buttons
         buf_jpg = io.BytesIO()
-        result_sheet.save(buf_jpg, format="JPEG", quality=95)
-        byte_data = buf_jpg.getvalue()
-
-        col_d1, col_d2 = st.columns(2)
-        col_d1.download_button(
-            label="📥 تحميل اللوحة كصورة بجودة عالية (JPG)",
-            data=byte_data,
-            file_name=f"{unit_code}-Contract-Sheet.jpg",
-            mime="image/jpeg"
+        sheet_img.save(buf_jpg, format="JPEG", quality=95)
+        st.download_button(
+            label=f"📥 تحميل لوحة {selected_code} (JPG)",
+            data=buf_jpg.getvalue(),
+            file_name=f"{selected_code}.jpg",
+            mime="image/jpeg",
+            use_container_width=True,
+            type="primary"
         )
 
-        # PDF Download
         buf_pdf = io.BytesIO()
-        result_sheet.save(buf_pdf, format="PDF", resolution=300.0)
-        col_d2.download_button(
-            label="📄 تحميل اللوحة كملف جاهز للطباعة (PDF)",
+        sheet_img.save(buf_pdf, format="PDF", resolution=300.0)
+        st.download_button(
+            label=f"📄 تحميل لوحة {selected_code} جاهزة للطباعة (PDF)",
             data=buf_pdf.getvalue(),
-            file_name=f"{unit_code}-Contract-Sheet.pdf",
-            mime="application/pdf"
+            file_name=f"{selected_code}.pdf",
+            mime="application/pdf",
+            use_container_width=True
         )
+
+    with col_preview:
+        st.image(sheet_img, caption=f"معاينة اللوحة التعاقدية - {selected_code}", use_container_width=True)
+
+with tab_batch:
+    st.subheader("توليد مجموعة وحدات أو الدور بالكامل بضغطة زر")
+    selected_batch = st.multiselect(
+        "اختر الوحدات المطلوب استخراج لوحاتها (أو اتركها كما هي لتوليد القائمة المختارة):",
+        options=list(FIRST_FLOOR_UNITS.keys()),
+        default=["AX-101", "AX-102", "AX-103", "AX-104", "AX-120", "BX-107"]
+    )
+    select_all = st.checkbox("تحديد كل وحدات الدور بالكامل (54 وحدة)")
+    if select_all:
+        selected_batch = list(FIRST_FLOOR_UNITS.keys())
+
+    if st.button(f"🚀 توليد وحزم {len(selected_batch)} لوحة الآن", type="primary", disabled=(len(selected_batch) == 0)):
+        progress = st.progress(0, text="جاري توليد اللوحات أوتوماتيكياً...")
+        zip_buf = io.BytesIO()
+        pdf_pages = []
+
+        with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for idx, code in enumerate(selected_batch):
+                progress.progress((idx + 1) / len(selected_batch), text=f"جاري تجهيز لوحة {code} ({idx + 1}/{len(selected_batch)})...")
+                s_im = generate_sheet_for_unit(
+                    unit_code=code,
+                    template_img=template_img,
+                    arr_clean=arr_clean,
+                    labeled_p=labeled_p,
+                    labeled_b=labeled_b,
+                    labeled_g=labeled_g,
+                    all_units_mask=all_units_mask,
+                    floor_text=floor_name,
+                    clean_cad_mode=clean_cad_mode
+                )
+                img_bytes = io.BytesIO()
+                s_im.save(img_bytes, format="JPEG", quality=95)
+                zf.writestr(f"{code}.jpg", img_bytes.getvalue())
+                pdf_pages.append(s_im)
+
+        progress.empty()
+        st.success(f"تم توليد {len(selected_batch)} لوحة بنجاح!")
+
+        c1, c2 = st.columns(2)
+        c1.download_button(
+            label=f"📦 تحميل جميع اللوحات كملف مضغوط ({len(selected_batch)} صورة JPG في ZIP)",
+            data=zip_buf.getvalue(),
+            file_name=f"{floor_name.replace(' ', '_')}_Unit_Sheets.zip",
+            mime="application/zip",
+            use_container_width=True,
+            type="primary"
+        )
+
+        if pdf_pages:
+            pdf_all_buf = io.BytesIO()
+            pdf_pages[0].save(
+                pdf_all_buf,
+                format="PDF",
+                resolution=300.0,
+                save_all=True,
+                append_images=pdf_pages[1:]
+            )
+            c2.download_button(
+                label=f"📕 تحميل كتاب موحد بجميع اللوحات ({len(selected_batch)} صفحة PDF)",
+                data=pdf_all_buf.getvalue(),
+                file_name=f"{floor_name.replace(' ', '_')}_All_Units.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
