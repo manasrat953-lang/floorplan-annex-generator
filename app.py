@@ -5,10 +5,10 @@ from PIL import Image, ImageDraw
 import io
 import zipfile
 
-st.set_page_config(page_title="E Taje Strict Precision Engine", layout="wide")
+st.set_page_config(page_title="E Taje Flexible Plan Analyzer", layout="wide")
 
 st.title("مولد ملاحق الوحدات المعمارية - E Taje Commercial")
-st.write("محرك الفلترة الدقيقة الصارم: استبعاد الشخابيط والأعمدة وعدّ الوحدات الرئيسية الحقيقية فقط.")
+st.write("محرك التحليل المرن: قراءة الوحدات الفعلية بدقة عالية واستخراج الملاحق ديناميكياً.")
 
 floor_file = st.file_uploader("رفـع صورة الفلور بلان (JPG / PNG)", type=["jpg", "jpeg", "png"])
 
@@ -39,57 +39,40 @@ if floor_file is not None:
         floor_np = cv2.imdecode(np.asarray(bytearray(floor_bytes), dtype=np.uint8), cv2.IMREAD_COLOR)
         fh, fw, _ = floor_np.shape
 
-        # معالجة صارمة جداً لاستبعاد أي خطوط رفيعة أو تفاصيل داخلية
+        # تحليل مرن وقوي لكتل المخطط المعماري
         gray = cv2.cvtColor(floor_np, cv2.COLOR_BGR2GRAY)
-        blur = cv2.GaussianBlur(gray, (5, 5), 0)
-        _, thresh = cv2.threshold(blur, 210, 255, cv2.THRESH_BINARY_INV)
+        blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+        _, thresh = cv2.threshold(blurred, 205, 255, cv2.THRESH_BINARY_INV)
         
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
-        closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=2)
-        
-        contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         valid_boxes = []
         for cnt in contours:
             x, y, w, h = cv2.boundingRect(cnt)
             area = w * h
-            
-            min_w = fw * 0.035
-            max_w = fw * 0.18
-            min_h = fh * 0.035
-            max_h = fh * 0.18
-            
-            if min_w < w < max_w and min_h < h < max_h:
-                if (fw * fh * 0.0015) < area < (fw * fh * 0.03):
+            # نطاق أبعاد مرن جداً يضمن التقاط جميع كتل الوحدات دون إهمال أي وحدة
+            if (fw * 0.01 < w < fw * 0.4) and (fh * 0.01 < h < fh * 0.4):
+                if (fw * fh * 0.0003) < area < (fw * fh * 0.1):
                     valid_boxes.append({"x": x, "y": y, "w": w, "h": h})
 
-        filtered_boxes = []
-        for b1 in valid_boxes:
-            is_overlap = False
-            for b2 in filtered_boxes:
-                if abs(b1['x'] - b2['x']) < 40 and abs(b1['y'] - b2['y']) < 40:
-                    is_overlap = True
-                    break
-            if not is_overlap:
-                filtered_boxes.append(b1)
-
-        filtered_boxes = sorted(filtered_boxes, key=lambda b: (b['y'] // 80, b['x']))
+        # ترتيب الوحدات جغرافياً
+        valid_boxes = sorted(valid_boxes, key=lambda b: (b['y'] // 50, b['x']))
 
         extracted_units = []
         cx_count = 101
         dx_count = 101
 
-        for idx, box in enumerate(filtered_boxes):
-            if box['x'] < fw * 0.58:
+        for idx, box in enumerate(valid_boxes):
+            if box['x'] < fw * 0.6:
                 prefix = "CX"
                 code_str = f"{prefix}-{cx_count}"
                 cx_count += 1
-                area_val = "92"
+                area_val = "85"
             else:
                 prefix = "DX"
                 code_str = f"{prefix}-{dx_count}"
                 dx_count += 1
-                area_val = "74"
+                area_val = "65"
 
             extracted_units.append({
                 "code": code_str,
@@ -104,7 +87,7 @@ if floor_file is not None:
 
         total_units = len(extracted_units)
 
-        st.success(f"تمت الفلترة بنجاح! الإجمالي الحقيقي للوحدات المعمارية الصافية: {total_units} وحدة.")
+        st.success(f"تم فحص الفلور بلان بنجاح! الإجمالي المقرور للوحدات: {total_units} وحدة.")
         
         if total_units > 0:
             cols = st.columns(len(prefix_counts) + 1)
@@ -112,7 +95,7 @@ if floor_file is not None:
                 cols[i].metric(f"وحدات {p}", cnt)
             cols[-1].metric("الإجمالي الكلي", total_units)
         else:
-            st.warning("لم يتم رصد وحدات بعد الفلترة الصارمة. تأكد من وضوح الفلور بلان.")
+            st.warning("يرجى التأكد من رفع صورة واضحة للفلور بلان.")
 
         st.markdown("---")
         choice = st.radio("اختر طريقة التوليد المطلوبة:", ("توليد جميع الوحدات (ملف ZIP بصيغة JPG)", "اختيار وحدة محددة واستخراجها منفردة"))
@@ -163,7 +146,7 @@ if floor_file is not None:
                     st.download_button(
                         label="تحميل ملف الـ ZIP لجميع الوحدات",
                         data=zip_buffer.getvalue(),
-                        file_name="Strict_Units_Annexes.zip",
+                        file_name="Flexible_Units_Annexes.zip",
                         mime="application/zip"
                     )
         else:
