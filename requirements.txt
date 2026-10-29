@@ -1,6 +1,5 @@
 streamlit
 opencv-python-headless
 pillow
-reportlab
 numpy
 pandas
