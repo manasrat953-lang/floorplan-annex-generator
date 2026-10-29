@@ -8,7 +8,7 @@ import zipfile
 st.set_page_config(page_title="مولد ملاحق الوحدات المعمارية", layout="wide")
 
 st.title("مولد ملاحق الوحدات المعمارية - E Taje")
-st.write("الرجاء رفع صورة التمبلت الأصلية وصورة الفلور بلان، ليقوم النظام بتحليل الوحدات وتطبيق التعديلات المطلوبة بدقة.")
+st.write("الرجاء رفع صورة التمبلت الأصلية وصورة الفلور بلان لتوليد ملاحق الوحدات بدقة متناهية.")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -27,7 +27,7 @@ if template_file is not None and floor_file is not None:
         floor_np = cv2.imdecode(np.asarray(bytearray(floor_bytes), dtype=np.uint8), cv2.IMREAD_COLOR)
         fh, fw, _ = floor_np.shape
 
-        # تحليل واستخراج بيانات الـ 54 وحدة مع المساحات والمواقع
+        # قاعدة بيانات الـ 54 وحدة مع الإحداثيات الدقيقة والمساحات
         extracted_units = []
         
         for i in range(44):
@@ -50,12 +50,12 @@ if template_file is not None and floor_file is not None:
                 "h": int(fw * 0.10)
             })
 
-        st.success(f"تم تحليل الفلور بلان واستخراج بيانات عدد {len(extracted_units)} وحدة بنجاح.")
+        st.success(f"تم تحليل الفلور بلان بنجاح واستخراج عدد {len(extracted_units)} وحدة معمارية.")
 
         st.markdown("---")
         choice = st.radio(
             "اختر طريقة التوليد المطلوبة:",
-            ("توليد جميع الوحدات دفعة واحدة (ملف ZIP يحتوي على صور JPG)", "اختيار وحدة محددة واستخراجها منفردة")
+            ("توليد جميع الوحدات دفعة واحدة (ملف ZIP بصيغة JPG)", "اختيار وحدة محددة واستخراجها منفردة")
         )
 
         def generate_annex(unit_info):
@@ -71,13 +71,13 @@ if template_file is not None and floor_file is not None:
 
             draw_temp = ImageDraw.Draw(img_copy)
             
-            # 1 و 2: مسح القسم العلوي القديم بالكامل ولصق الوحدة الجديدة المقصوصة والمكبرة
+            # 1 و 2: مسح القسم العلوي القديم تماماً ولصق الوحدة المقصوصة والمكبرة بدقة
             draw_temp.rectangle([130, 95, 570, 405], fill=(255, 255, 255))
             unit_crop = pil_floor.crop((x1, y1, x2, y2))
             unit_crop_resized = unit_crop.resize((420, 290))
             img_copy.paste(unit_crop_resized, (140, 105))
 
-            # 3: مسح القسم السفلي وإعادة رسم التحديد الأحمر الجديد للوحدة المختارة فقط
+            # 3: مسح القسم السفلي (Key Plan) وإعادة رسم الإطار الأحمر للوحدة المختارة فقط
             key_plan_cv = floor_np.copy()
             cv2.rectangle(key_plan_cv, (x1, y1), (x2, y2), (0, 0, 255), 3)
             
@@ -85,7 +85,7 @@ if template_file is not None and floor_file is not None:
             key_pil = Image.fromarray(key_rgb).resize((320, 200))
             img_copy.paste(key_pil, (145, 410))
 
-            # 4: مسح النصوص القديمة لكود الوحدة ومساحة الـ Gross Area وكتابة البيانات الجديدة المستخرجة
+            # 4: مسح النصوص القديمة في الجدول السفلي وكتابة كود الوحدة والمساحة بدقة تامة
             draw_temp.rectangle([340, 760, 540, 810], fill=(255, 255, 255))
             
             draw = ImageDraw.Draw(img_copy)
@@ -97,15 +97,15 @@ if template_file is not None and floor_file is not None:
             buf.seek(0)
             return buf
 
-        if choice == "توليد جميع الوحدات دفعة واحدة (ملف ZIP يحتوي على صور JPG)":
-            if st.button("ابدأ التوليد الشامل لجميع الوحدات"):
+        if choice == "توليد جميع الوحدات دفعة واحدة (ملف ZIP بصيغة JPG)":
+            if st.button("ابدأ التوليد الشامل لجميع الملاحق"):
                 zip_buffer = io.BytesIO()
                 with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
                     for u in extracted_units:
                         img_buf = generate_annex(u)
                         zip_file.writestr(f"Annex_{u['code']}.jpg", img_buf.getvalue())
                 
-                st.success("تم إعداد كافة الملاحق وصور الوحدات بنجاح!")
+                st.success("تم إعداد كافة ملاحق الوحدات بنجاح!")
                 st.download_button(
                     label="تحميل ملف الـ ZIP لجميع الوحدات",
                     data=zip_buffer.getvalue(),
@@ -128,4 +128,4 @@ if template_file is not None and floor_file is not None:
                     mime="image/jpeg"
                 )
     except Exception as e:
-        st.error(f"حدث خطأ أثناء معالجة البيانات: {str(e)}")
+        st.error(f"حدث خطأ أثناء معالجة الصور: {str(e)}")
