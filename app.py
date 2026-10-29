@@ -1,8 +1,7 @@
 import streamlit as st
 import numpy as np
 import cv2
-from PIL import Image, ImageDraw, ImageFont, ImageOps
-from scipy.ndimage import label, binary_fill_holes, binary_dilation, binary_erosion
+from PIL import Image, ImageDraw, ImageFont
 import io
 import zipfile
 import os
@@ -25,7 +24,7 @@ WHITE_FILL = (255, 255, 255)
 RED_HIGHLIGHT = (217, 95, 108)
 
 # -------------------------------------------------------------
-# Complete Database of All 53 First-Floor Units (AX & BX)
+# Complete Database of All 54 First-Floor Units (AX & BX)
 # Automatically maps every unit code to its exact location,
 # area, terrace/spill-out area, and category on the Floor Layout!
 # -------------------------------------------------------------
@@ -87,6 +86,35 @@ FIRST_FLOOR_UNITS = {
 }
 
 
+# -------------------------------------------------------------
+# Pure OpenCV Morphological Helpers (No SciPy Needed!)
+# -------------------------------------------------------------
+def fill_holes_cv2(mask_bool: np.ndarray) -> np.ndarray:
+    """Fills interior holes in a binary mask using pure OpenCV floodFill."""
+    u8 = mask_bool.astype(np.uint8) * 255
+    h, w = u8.shape
+    flood = u8.copy()
+    mask_ff = np.zeros((h + 2, w + 2), np.uint8)
+    cv2.floodFill(flood, mask_ff, (0, 0), 255)
+    holes = cv2.bitwise_not(flood)
+    return (u8 | holes) > 0
+
+
+def dilate_cv2(mask_bool: np.ndarray, iterations: int = 1) -> np.ndarray:
+    kernel = np.ones((3, 3), np.uint8)
+    return cv2.dilate(mask_bool.astype(np.uint8), kernel, iterations=iterations) > 0
+
+
+def erode_cv2(mask_bool: np.ndarray, iterations: int = 1) -> np.ndarray:
+    kernel = np.ones((3, 3), np.uint8)
+    return cv2.erode(mask_bool.astype(np.uint8), kernel, iterations=iterations) > 0
+
+
+def label_cv2(mask_bool: np.ndarray):
+    num_labels, labels = cv2.connectedComponents(mask_bool.astype(np.uint8), connectivity=4)
+    return labels, num_labels - 1
+
+
 def get_system_font(size):
     """Loads a clean Sans-Serif font across Linux/Windows/macOS."""
     font_candidates = [
@@ -108,10 +136,9 @@ def get_system_font(size):
 def segment_floor_layout(arr_layout: np.ndarray):
     """
     Automatically segments the floor layout image into distinct unit polygons
-    (Purple Clinics, Blue Offices, Green Terraces) using connected components.
+    (Purple Clinics, Blue Offices, Green Terraces) using pure OpenCV.
     """
     arr = arr_layout.copy()
-    # Mask out top-left Room Legend if present
     h, w = arr.shape[:2]
     arr[0:int(h * 0.145), 0:int(w * 0.086), :] = 255
 
@@ -131,9 +158,9 @@ def segment_floor_layout(arr_layout: np.ndarray):
         & (arr[:, :, 1] > 235)
     )
 
-    labeled_p, _ = label(purple_mask)
-    labeled_b, _ = label(blue_mask)
-    labeled_g, _ = label(green_mask)
+    labeled_p, _ = label_cv2(purple_mask)
+    labeled_b, _ = label_cv2(blue_mask)
+    labeled_g, _ = label_cv2(green_mask)
     all_units_mask = purple_mask | blue_mask | green_mask
 
     return arr, labeled_p, labeled_b, labeled_g, all_units_mask
@@ -165,13 +192,13 @@ def isolate_and_upscale_unit(
     removes neighboring units & corridor backgrounds, cleans interior text,
     and upscales to a crisp high-resolution CAD diagram.
     """
-    filled = binary_fill_holes(comp_mask)
+    filled = fill_holes_cv2(comp_mask)
     ys, xs = np.where(filled)
     cx, cy = int(np.mean(xs)), int(np.mean(ys))
 
     total_mask = filled.copy()
     if terrace_mask is not None:
-        t_filled = binary_fill_holes(terrace_mask)
+        t_filled = fill_holes_cv2(terrace_mask)
         total_mask = total_mask | t_filled
 
     tys, txs = np.where(total_mask)
@@ -189,30 +216,27 @@ def isolate_and_upscale_unit(
     sub_total = total_mask[y1:y2, x1:x2]
     sub_other = (all_units_mask[y1:y2, x1:x2]) & (~sub_total)
 
-    # Keep structural walls/columns/shafts belonging to this unit (within 6px)
-    keep_zone = binary_dilation(sub_total, iterations=6)
+    keep_zone = dilate_cv2(sub_total, iterations=6)
     is_corridor = (sub[:, :, 0] > 228) & (sub[:, :, 1] > 228) & (sub[:, :, 2] > 225) & (~sub_total)
 
     sub[~keep_zone] = [255, 255, 255]
     sub[sub_other] = [255, 255, 255]
     sub[is_corridor] = [255, 255, 255]
 
-    # Replace low-res text inside the unit interior while preserving door swing arcs near walls
-    eroded_deep = binary_erosion(sub_unit, iterations=12)
+    eroded_deep = erode_cv2(sub_unit, iterations=12)
     lcx, lcy = cx - x1, cy - y1
     text_box = np.zeros_like(sub_unit)
     text_box[max(0, lcy - 18):min(sub.shape[0], lcy + 18), max(0, lcx - 28):min(sub.shape[1], lcx + 28)] = True
     sub[(eroded_deep | text_box) & sub_unit] = fill_rgb
 
     if terrace_mask is not None:
-        sub_terr = binary_fill_holes(terrace_mask)[y1:y2, x1:x2]
+        sub_terr = fill_holes_cv2(terrace_mask)[y1:y2, x1:x2]
         ty_s, tx_s = np.where(sub_terr)
         tcx, tcy = int(np.mean(tx_s)), int(np.mean(ty_s))
         t_box = np.zeros_like(sub_terr)
         t_box[max(0, tcy - 15):min(sub.shape[0], tcy + 15), max(0, tcx - 26):min(sub.shape[1], tcx + 26)] = True
         sub[t_box & sub_terr] = GREEN_FILL
 
-    # High-res 8x Lanczos upscaling + unsharp mask for crisp CAD lines
     scale = 8
     h_s, w_s = sub.shape[:2]
     up = cv2.resize(sub, (w_s * scale, h_s * scale), interpolation=cv2.INTER_LANCZOS4)
@@ -270,7 +294,6 @@ def generate_sheet_for_unit(
         if t_id > 0:
             terrace_mask = (labeled_g == t_id)
 
-    # 1. Get Top Unit Graphic
     if custom_unit_img is not None:
         unit_img = custom_unit_img.convert("RGB")
     else:
@@ -285,14 +308,12 @@ def generate_sheet_for_unit(
             clean_cad_mode=clean_cad_mode
         )
 
-    # 2. Prepare Template Canvas
     canvas = template_img.copy().convert("RGB")
     draw = ImageDraw.Draw(canvas)
     font_main = get_system_font(52)
     font_sup = get_system_font(34)
     font_floor = get_system_font(58)
 
-    # Update Floor Title if changed
     if floor_text.strip() != "First Floor":
         draw.rectangle([950, 35, 1550, 130], fill=WHITE_FILL)
         fb = font_floor.getbbox(floor_text)
@@ -300,7 +321,6 @@ def generate_sheet_for_unit(
         draw.text((1240 - fw // 2, 45), floor_text, fill=BLACK_LINE, font=font_floor)
         draw.line([(1240 - fw // 2, 105), (1240 + fw // 2, 105)], fill=BLACK_LINE, width=3)
 
-    # Paste Top Unit Plan
     uw, uh = unit_img.size
     max_w, max_h = 1223, 1213
     scale = min(max_w / uw, max_h / uh)
@@ -308,13 +328,11 @@ def generate_sheet_for_unit(
     u_resized = unit_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
     canvas.paste(u_resized, (1232 - new_w // 2, 1143 - new_h // 2))
 
-    # 3. Highlight Exact Unit Polygon on Key Plan
     arr_k = arr_clean.copy()
-    highlight_poly = binary_fill_holes(comp_mask)
+    highlight_poly = fill_holes_cv2(comp_mask)
     if terrace_mask is not None:
-        highlight_poly = highlight_poly | binary_fill_holes(terrace_mask)
-    # Dilate by 2px so surrounding wall borders of the selected unit also tint cleanly like reference AX-101
-    highlight_poly = binary_dilation(highlight_poly, iterations=2)
+        highlight_poly = highlight_poly | fill_holes_cv2(terrace_mask)
+    highlight_poly = dilate_cv2(highlight_poly, iterations=2)
 
     ys_h, xs_h = np.where(highlight_poly)
     hx1, hy1, hx2, hy2 = xs_h.min(), ys_h.min(), xs_h.max() + 1, ys_h.max() + 1
@@ -338,7 +356,6 @@ def generate_sheet_for_unit(
     kp_resized = kp_crop.resize((kp_w, kp_h), Image.Resampling.LANCZOS)
     canvas.paste(kp_resized, (1244 - kp_w // 2, 2261))
 
-    # 4. Update Title Block: Unit Code & Area
     draw.rectangle([1185, 3305, 1765, 3480], fill=WHITE_FILL)
     cb = font_main.getbbox(unit_code)
     cw = cb[2] - cb[0]
@@ -401,10 +418,13 @@ with st.sidebar:
 
 template_img = load_default_or_uploaded(up_template, [
     "MAIN TEMPALTE.jpg",
+    "MAIN TEMPLATE.jpg",
+    "template.jpg",
     "user_uploaded_files/ttl=63d/user_uploaded/MAIN TEMPALTE.jpg"
 ])
 layout_img = load_default_or_uploaded(up_layout, [
     "ETAJE-AX-BX-01-FIRST FLOOR - WITH AREA.jpg",
+    "layout.jpg",
     "user_uploaded_files/ttl=63d/user_uploaded/ETAJE-AX-BX-01-FIRST FLOOR - WITH AREA.jpg"
 ])
 
@@ -412,7 +432,6 @@ if template_img is None or layout_img is None:
     st.info("👈 يرجى رفع ملف **مخطط الدور (Layout)** وملف **القالب (MAIN TEMPALTE)** من القائمة الجانبية للبدء (أو وضعهما في نفس مجلد `app.py` على GitHub ليعمل البرنامج بدون رفع في كل مرة).")
     st.stop()
 
-# Automatically segment all 53 units from the layout image
 arr_clean, labeled_p, labeled_b, labeled_g, all_units_mask = segment_floor_layout(np.array(layout_img))
 
 tab_single, tab_batch = st.tabs([
