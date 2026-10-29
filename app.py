@@ -1,149 +1,608 @@
 import streamlit as st
+import numpy as np
+import cv2
 from PIL import Image, ImageDraw, ImageFont
 import io
+import zipfile
+import os
 
 st.set_page_config(
-    page_title="Auto Contract Sheet Generator",
+    page_title="Auto Contract Sheet Generator | مولّد اللوحات التعاقدية الأوتوماتيكي",
     page_icon="🏢",
     layout="wide"
 )
 
+# -------------------------------------------------------------
+# Constant Colors & Styling
+# -------------------------------------------------------------
+PURPLE_FILL = (216, 190, 215)
+BLUE_FILL = (203, 230, 251)
+GREEN_FILL = (238, 250, 230)
+GRAY_WALL = (128, 128, 128)
 BLACK_LINE = (0, 0, 0)
 WHITE_FILL = (255, 255, 255)
+RED_HIGHLIGHT = (217, 95, 108)
 
-# قاعدة بيانات الوحدات مع الإحداثيات المبسطة
+# -------------------------------------------------------------
+# Complete Database of All 54 First-Floor Units (AX & BX)
+# Automatically maps every unit code to its exact location,
+# area, terrace/spill-out area, and category on the Floor Layout!
+# -------------------------------------------------------------
 FIRST_FLOOR_UNITS = {
-    "AX-101": {"area": 103, "box": (860, 880, 950, 980)},
-    "AX-102": {"area": 52,  "box": (790, 880, 860, 980)},
-    "AX-103": {"area": 52,  "box": (730, 880, 800, 980)},
-    "AX-104": {"area": 103, "box": (650, 880, 730, 980)},
-    "AX-105": {"area": 38,  "box": (630, 810, 720, 890)},
-    "AX-106": {"area": 38,  "box": (630, 760, 720, 835)},
-    "AX-107": {"area": 38,  "box": (630, 700, 720, 780)},
-    "AX-108": {"area": 38,  "box": (630, 650, 720, 725)},
-    "AX-109": {"area": 39,  "box": (630, 595, 720, 670)},
-    "AX-110": {"area": 52,  "box": (620, 545, 710, 620)},
-    "AX-111": {"area": 102, "box": (660, 480, 755, 565)},
-    "AX-112": {"area": 103, "box": (635, 415, 730, 500)},
-    "AX-113": {"area": 103, "box": (585, 365, 680, 455)},
-    "AX-114": {"area": 104, "box": (520, 335, 620, 425)},
-    "AX-115": {"area": 51,  "box": (465, 385, 545, 470)},
-    "AX-116": {"area": 39,  "box": (410, 375, 495, 455)},
-    "AX-117": {"area": 39,  "box": (360, 375, 445, 440)},
-    "AX-118": {"area": 39,  "box": (310, 375, 395, 435)},
-    "AX-119": {"area": 39,  "box": (260, 375, 345, 435)},
-    "AX-120": {"area": 39,  "box": (210, 375, 290, 435)},
-    "AX-121": {"area": 121, "box": (115, 355, 205, 445)},
-    "AX-122": {"area": 61,  "box": (115, 280, 205, 360)},
-    "AX-123": {"area": 61,  "box": (115, 230, 205, 305)},
-    "AX-124": {"area": 121, "box": (115, 145, 205, 235)},
-    "AX-125": {"area": 38,  "box": (210, 130, 285, 200)},
-    "AX-126": {"area": 38,  "box": (260, 130, 340, 200)},
-    "AX-127": {"area": 38,  "box": (310, 130, 395, 200)},
-    "AX-128": {"area": 38,  "box": (360, 130, 445, 200)},
-    "AX-129": {"area": 38,  "box": (410, 130, 495, 200)},
-    "AX-130": {"area": 38,  "box": (465, 130, 545, 200)},
-    "AX-131": {"area": 91,  "box": (520, 160, 615, 250)},
-    "AX-132": {"area": 92,  "box": (585, 175, 685, 270)},
-    "AX-133": {"area": 92,  "box": (650, 200, 750, 295)},
-    "AX-134": {"area": 92,  "box": (710, 240, 805, 330)},
-    "AX-135": {"area": 92,  "box": (760, 290, 860, 380)},
-    "AX-136": {"area": 92,  "box": (800, 345, 890, 435)},
-    "AX-137": {"area": 92,  "box": (830, 410, 915, 500)},
-    "AX-138": {"area": 91,  "box": (840, 475, 935, 565)},
-    "AX-139": {"area": 38,  "box": (875, 540, 955, 615)},
-    "AX-140": {"area": 38,  "box": (875, 595, 955, 670)},
-    "AX-141": {"area": 38,  "box": (875, 650, 955, 725)},
-    "AX-142": {"area": 38,  "box": (875, 700, 955, 780)},
-    "AX-143": {"area": 38,  "box": (875, 760, 955, 835)},
-    "AX-144": {"area": 38,  "box": (875, 810, 955, 890)},
-    "BX-101": {"area": 74,  "box": (330, 555, 460, 630)},
-    "BX-102": {"area": 83,  "box": (225, 540, 340, 620)},
-    "BX-103": {"area": 42,  "box": (210, 595, 300, 675)},
-    "BX-104": {"area": 42,  "box": (210, 650, 300, 725)},
-    "BX-105": {"area": 42,  "box": (210, 700, 300, 780)},
-    "BX-106": {"area": 42,  "box": (210, 755, 300, 835)},
-    "BX-107": {"area": 74,  "box": (210, 835, 305, 985)},
-    "BX-108": {"area": 71,  "box": (310, 860, 400, 985)},
-    "BX-109": {"area": 54,  "box": (335, 800, 425, 885)},
-    "BX-110": {"area": 55,  "box": (335, 750, 425, 830)},
+    "AX-101": {"area": 103, "spill": 0,  "type": "purple", "center": (905, 931)},
+    "AX-102": {"area": 52,  "spill": 0,  "type": "purple", "center": (825, 931)},
+    "AX-103": {"area": 52,  "spill": 0,  "type": "purple", "center": (774, 931)},
+    "AX-104": {"area": 103, "spill": 0,  "type": "purple", "center": (693, 931)},
+    "AX-105": {"area": 38,  "spill": 0,  "type": "purple", "center": (679, 851)},
+    "AX-106": {"area": 38,  "spill": 0,  "type": "purple", "center": (679, 799)},
+    "AX-107": {"area": 38,  "spill": 0,  "type": "purple", "center": (679, 746)},
+    "AX-108": {"area": 38,  "spill": 0,  "type": "purple", "center": (679, 693)},
+    "AX-109": {"area": 39,  "spill": 0,  "type": "purple", "center": (679, 640)},
+    "AX-110": {"area": 52,  "spill": 0,  "type": "purple", "center": (667, 588)},
+    "AX-111": {"area": 102, "spill": 0,  "type": "purple", "center": (710, 525)},
+    "AX-112": {"area": 103, "spill": 0,  "type": "purple", "center": (684, 462)},
+    "AX-113": {"area": 103, "spill": 0,  "type": "purple", "center": (635, 412)},
+    "AX-114": {"area": 104, "spill": 0,  "type": "purple", "center": (571, 386)},
+    "AX-115": {"area": 51,  "spill": 0,  "type": "purple", "center": (509, 430)},
+    "AX-116": {"area": 39,  "spill": 0,  "type": "purple", "center": (456, 418)},
+    "AX-117": {"area": 39,  "spill": 0,  "type": "purple", "center": (403, 418)},
+    "AX-118": {"area": 39,  "spill": 0,  "type": "purple", "center": (351, 418)},
+    "AX-119": {"area": 39,  "spill": 0,  "type": "purple", "center": (298, 418)},
+    "AX-120": {"area": 39,  "spill": 0,  "type": "purple", "center": (245, 418)},
+    "AX-121": {"area": 121, "spill": 0,  "type": "purple", "center": (159, 404)},
+    "AX-122": {"area": 61,  "spill": 0,  "type": "purple", "center": (159, 324)},
+    "AX-123": {"area": 61,  "spill": 0,  "type": "purple", "center": (159, 272)},
+    "AX-124": {"area": 121, "spill": 0,  "type": "purple", "center": (159, 191)},
+    "AX-125": {"area": 38,  "spill": 0,  "type": "purple", "center": (245, 177)},
+    "AX-126": {"area": 38,  "spill": 0,  "type": "purple", "center": (298, 178)},
+    "AX-127": {"area": 38,  "spill": 0,  "type": "purple", "center": (351, 177)},
+    "AX-128": {"area": 38,  "spill": 0,  "type": "purple", "center": (403, 178)},
+    "AX-129": {"area": 38,  "spill": 0,  "type": "purple", "center": (456, 177)},
+    "AX-130": {"area": 38,  "spill": 0,  "type": "purple", "center": (509, 177)},
+    "AX-131": {"area": 91,  "spill": 0,  "type": "purple", "center": (571, 207)},
+    "AX-132": {"area": 92,  "spill": 0,  "type": "purple", "center": (638, 221)},
+    "AX-133": {"area": 92,  "spill": 0,  "type": "purple", "center": (703, 248)},
+    "AX-134": {"area": 92,  "spill": 0,  "type": "purple", "center": (760, 287)},
+    "AX-135": {"area": 92,  "spill": 0,  "type": "purple", "center": (810, 336)},
+    "AX-136": {"area": 92,  "spill": 0,  "type": "purple", "center": (848, 394)},
+    "AX-137": {"area": 92,  "spill": 0,  "type": "purple", "center": (875, 458)},
+    "AX-138": {"area": 91,  "spill": 0,  "type": "purple", "center": (889, 525)},
+    "AX-139": {"area": 38,  "spill": 0,  "type": "purple", "center": (920, 588)},
+    "AX-140": {"area": 38,  "spill": 0,  "type": "purple", "center": (919, 640)},
+    "AX-141": {"area": 38,  "spill": 0,  "type": "purple", "center": (919, 693)},
+    "AX-142": {"area": 38,  "spill": 0,  "type": "purple", "center": (919, 746)},
+    "AX-143": {"area": 38,  "spill": 0,  "type": "purple", "center": (919, 799)},
+    "AX-144": {"area": 38,  "spill": 0,  "type": "purple", "center": (919, 851)},
+    "BX-101": {"area": 74,  "spill": 0,  "type": "blue",   "center": (374, 599)},
+    "BX-102": {"area": 83,  "spill": 0,  "type": "blue",   "center": (271, 586)},
+    "BX-103": {"area": 42,  "spill": 0,  "type": "blue",   "center": (256, 640)},
+    "BX-104": {"area": 42,  "spill": 0,  "type": "blue",   "center": (256, 693)},
+    "BX-105": {"area": 42,  "spill": 0,  "type": "blue",   "center": (256, 746)},
+    "BX-106": {"area": 42,  "spill": 0,  "type": "blue",   "center": (256, 799)},
+    "BX-107": {"area": 74,  "spill": 20, "type": "blue",   "center": (259, 875), "terrace_center": (270, 956), "terrace_label": "BX-107 Terrace"},
+    "BX-108": {"area": 71,  "spill": 24, "type": "blue",   "center": (363, 905), "terrace_center": (328, 959), "terrace_label": "BX-108 Terrace"},
+    "BX-109": {"area": 54,  "spill": 0,  "type": "blue",   "center": (380, 852)},
+    "BX-110": {"area": 55,  "spill": 0,  "type": "blue",   "center": (381, 798)},
 }
 
-def get_font(size):
-    for path in ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "arial.ttf"]:
+
+# -------------------------------------------------------------
+# Pure OpenCV Morphological Helpers (No SciPy Needed!)
+# -------------------------------------------------------------
+def fill_holes_cv2(mask_bool: np.ndarray) -> np.ndarray:
+    """Fills interior holes in a binary mask using pure OpenCV floodFill."""
+    u8 = mask_bool.astype(np.uint8) * 255
+    h, w = u8.shape
+    flood = u8.copy()
+    mask_ff = np.zeros((h + 2, w + 2), np.uint8)
+    cv2.floodFill(flood, mask_ff, (0, 0), 255)
+    holes = cv2.bitwise_not(flood)
+    return (u8 | holes) > 0
+
+
+def dilate_cv2(mask_bool: np.ndarray, iterations: int = 1) -> np.ndarray:
+    kernel = np.ones((3, 3), np.uint8)
+    return cv2.dilate(mask_bool.astype(np.uint8), kernel, iterations=iterations) > 0
+
+
+def erode_cv2(mask_bool: np.ndarray, iterations: int = 1) -> np.ndarray:
+    kernel = np.ones((3, 3), np.uint8)
+    return cv2.erode(mask_bool.astype(np.uint8), kernel, iterations=iterations) > 0
+
+
+def label_cv2(mask_bool: np.ndarray):
+    num_labels, labels = cv2.connectedComponents(mask_bool.astype(np.uint8), connectivity=4)
+    return labels, num_labels - 1
+
+
+def get_system_font(size):
+    """Loads a clean Sans-Serif font across Linux/Windows/macOS."""
+    font_candidates = [
+        "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "arial.ttf",
+        "Arial.ttf"
+    ]
+    for path in font_candidates:
         try:
             return ImageFont.truetype(path, size)
         except Exception:
             continue
     return ImageFont.load_default()
 
-def generate_sheet(unit_code, template_img, layout_pil):
+
+@st.cache_data
+def segment_floor_layout(arr_layout: np.ndarray):
+    """
+    Automatically segments the floor layout image into distinct unit polygons
+    (Purple Clinics, Blue Offices, Green Terraces) using pure OpenCV.
+    """
+    arr = arr_layout.copy()
+    h, w = arr.shape[:2]
+    arr[0:int(h * 0.145), 0:int(w * 0.086), :] = 255
+
+    purple_mask = (
+        ((arr[:, :, 0].astype(int) - arr[:, :, 1].astype(int)) > 16)
+        & ((arr[:, :, 2].astype(int) - arr[:, :, 1].astype(int)) > 16)
+        & (arr[:, :, 0] > 185)
+    )
+    blue_mask = (
+        ((arr[:, :, 2].astype(int) - arr[:, :, 0].astype(int)) > 25)
+        & ((arr[:, :, 1].astype(int) - arr[:, :, 0].astype(int)) > 10)
+        & (arr[:, :, 2] > 215)
+    )
+    green_mask = (
+        ((arr[:, :, 1].astype(int) - arr[:, :, 2].astype(int)) > 12)
+        & ((arr[:, :, 1].astype(int) - arr[:, :, 0].astype(int)) > 6)
+        & (arr[:, :, 1] > 235)
+    )
+
+    labeled_p, _ = label_cv2(purple_mask)
+    labeled_b, _ = label_cv2(blue_mask)
+    labeled_g, _ = label_cv2(green_mask)
+    all_units_mask = purple_mask | blue_mask | green_mask
+
+    return arr, labeled_p, labeled_b, labeled_g, all_units_mask
+
+
+def find_component_at(lbl_arr: np.ndarray, cx: int, cy: int, scale_x: float = 1.0, scale_y: float = 1.0):
+    """Finds the component ID around scaled coordinates (cx, cy)."""
+    sx, sy = int(cx * scale_x), int(cy * scale_y)
+    r = max(10, int(10 * max(scale_x, scale_y)))
+    win = lbl_arr[max(0, sy - r):min(lbl_arr.shape[0], sy + r + 1), max(0, sx - r):min(lbl_arr.shape[1], sx + r + 1)]
+    vals = win[win > 0]
+    if len(vals) == 0:
+        return 0
+    return int(np.bincount(vals).argmax())
+
+
+def isolate_and_upscale_unit(
+    arr_clean: np.ndarray,
+    comp_mask: np.ndarray,
+    all_units_mask: np.ndarray,
+    fill_rgb: tuple,
+    unit_code: str,
+    terrace_mask: np.ndarray = None,
+    terrace_code: str = None,
+    clean_cad_mode: bool = True
+) -> Image.Image:
+    """
+    Automatically isolates a single unit (plus optional terrace) from the floor layout,
+    removes neighboring units & corridor backgrounds, cleans interior text,
+    and upscales to a crisp high-resolution CAD diagram.
+    """
+    filled = fill_holes_cv2(comp_mask)
+    ys, xs = np.where(filled)
+    cx, cy = int(np.mean(xs)), int(np.mean(ys))
+
+    total_mask = filled.copy()
+    if terrace_mask is not None:
+        t_filled = fill_holes_cv2(terrace_mask)
+        total_mask = total_mask | t_filled
+
+    tys, txs = np.where(total_mask)
+    margin = 8
+    x1 = max(0, int(txs.min()) - margin)
+    y1 = max(0, int(tys.min()) - margin)
+    x2 = min(arr_clean.shape[1], int(txs.max()) + margin + 1)
+    y2 = min(arr_clean.shape[0], int(tys.max()) + margin + 1)
+
+    sub = arr_clean[y1:y2, x1:x2].copy()
+    if not clean_cad_mode:
+        return Image.fromarray(sub)
+
+    sub_unit = filled[y1:y2, x1:x2]
+    sub_total = total_mask[y1:y2, x1:x2]
+    sub_other = (all_units_mask[y1:y2, x1:x2]) & (~sub_total)
+
+    keep_zone = dilate_cv2(sub_total, iterations=6)
+    is_corridor = (sub[:, :, 0] > 228) & (sub[:, :, 1] > 228) & (sub[:, :, 2] > 225) & (~sub_total)
+
+    sub[~keep_zone] = [255, 255, 255]
+    sub[sub_other] = [255, 255, 255]
+    sub[is_corridor] = [255, 255, 255]
+
+    eroded_deep = erode_cv2(sub_unit, iterations=12)
+    lcx, lcy = cx - x1, cy - y1
+    text_box = np.zeros_like(sub_unit)
+    text_box[max(0, lcy - 18):min(sub.shape[0], lcy + 18), max(0, lcx - 28):min(sub.shape[1], lcx + 28)] = True
+    sub[(eroded_deep | text_box) & sub_unit] = fill_rgb
+
+    if terrace_mask is not None:
+        sub_terr = fill_holes_cv2(terrace_mask)[y1:y2, x1:x2]
+        ty_s, tx_s = np.where(sub_terr)
+        tcx, tcy = int(np.mean(tx_s)), int(np.mean(ty_s))
+        t_box = np.zeros_like(sub_terr)
+        t_box[max(0, tcy - 15):min(sub.shape[0], tcy + 15), max(0, tcx - 26):min(sub.shape[1], tcx + 26)] = True
+        sub[t_box & sub_terr] = GREEN_FILL
+
+    h_s, w_s = sub.shape[:2]
+    scale = max(1, min(8, 3000 // max(w_s, h_s)))
+    up = cv2.resize(sub, (w_s * scale, h_s * scale), interpolation=cv2.INTER_LANCZOS4)
+    blur = cv2.GaussianBlur(up, (0, 0), 2.0)
+    up_sharp = cv2.addWeighted(up, 1.8, blur, -0.8, 0)
+
+    im_up = Image.fromarray(up_sharp)
+    draw = ImageDraw.Draw(im_up)
+    f_u = get_system_font(38)
+    ub = f_u.getbbox(unit_code)
+    tw, th = ub[2] - ub[0], ub[3] - ub[1]
+    draw.text((lcx * scale - tw // 2, lcy * scale - th // 2), unit_code, fill=BLACK_LINE, font=f_u)
+
+    if terrace_mask is not None and terrace_code:
+        f_t = get_system_font(24)
+        tb = f_t.getbbox(terrace_code)
+        ttw, tth = tb[2] - tb[0], tb[3] - tb[1]
+        draw.text((tcx * scale - ttw // 2, tcy * scale - tth // 2), terrace_code, fill=BLACK_LINE, font=f_t)
+
+    return im_up
+
+
+def generate_sheet_for_unit(
+    unit_code: str,
+    template_img: Image.Image,
+    arr_clean: np.ndarray,
+    labeled_p: np.ndarray,
+    labeled_b: np.ndarray,
+    labeled_g: np.ndarray,
+    all_units_mask: np.ndarray,
+    floor_text: str = "First Floor",
+    area_override: float = None,
+    spill_override: float = None,
+    clean_cad_mode: bool = True,
+    custom_unit_img: Image.Image = None
+) -> Image.Image:
+    """Generates the complete 2480x3508 contract sheet for any selected unit code."""
     info = FIRST_FLOOR_UNITS[unit_code]
-    lw, lh = layout_pil.size
-    bx1, by1, bx2, by2 = info["box"]
-    
-    rx1, ry1 = int((bx1 / 1000.0) * lw), int((by1 / 1000.0) * lh)
-    rx2, ry2 = int((bx2 / 1000.0) * lw), int((by2 / 1000.0) * lh)
+    area_val = float(area_override) if area_override is not None else float(info["area"])
+    spill_val = float(spill_override) if spill_override is not None else float(info["spill"])
 
-    crop = layout_pil.crop((rx1, ry1, rx2, ry2))
-    unit_img = crop.resize((crop.width * 2, crop.height * 2), Image.Resampling.BILINEAR)
-    
-    # تحجيم القالب لمقاس آمن تماماً وثابت (1240x1754 مناسب جداً وخفيف)
-    canvas = template_img.resize((1240, 1754), Image.Resampling.BILINEAR).convert("RGB")
+    h_lay, w_lay = arr_clean.shape[:2]
+    sx, sy = w_lay / 998.0, h_lay / 1024.0
+
+    lbl_arr = labeled_p if info["type"] == "purple" else labeled_b
+    fill_rgb = PURPLE_FILL if info["type"] == "purple" else BLUE_FILL
+
+    comp_id = find_component_at(lbl_arr, info["center"][0], info["center"][1], sx, sy)
+    if comp_id == 0:
+        raise ValueError(
+            f"مش لاقي الوحدة {unit_code} على المخطط - غالباً الـ Layout مقصوص أو بحجم/نسبة مختلفة. "
+            f"ارفع صورة مخطط الدور الكاملة غير المقصوصة."
+        )
+    comp_mask = (lbl_arr == comp_id)
+
+    terrace_mask = None
+    terrace_label = info.get("terrace_label")
+    if "terrace_center" in info and spill_val > 0:
+        t_id = find_component_at(labeled_g, info["terrace_center"][0], info["terrace_center"][1], sx, sy)
+        if t_id > 0:
+            terrace_mask = (labeled_g == t_id)
+
+    if custom_unit_img is not None:
+        unit_img = custom_unit_img.convert("RGB")
+    else:
+        unit_img = isolate_and_upscale_unit(
+            arr_clean=arr_clean,
+            comp_mask=comp_mask,
+            all_units_mask=all_units_mask,
+            fill_rgb=fill_rgb,
+            unit_code=unit_code,
+            terrace_mask=terrace_mask,
+            terrace_code=terrace_label,
+            clean_cad_mode=clean_cad_mode
+        )
+
+    canvas = template_img.copy().convert("RGB")
     draw = ImageDraw.Draw(canvas)
-    
-    # لصق الوحدة بمقاسات متوازنة
+    font_main = get_system_font(52)
+    font_sup = get_system_font(34)
+    font_floor = get_system_font(58)
+
+    if floor_text.strip() != "First Floor":
+        draw.rectangle([950, 35, 1550, 130], fill=WHITE_FILL)
+        fb = font_floor.getbbox(floor_text)
+        fw = fb[2] - fb[0]
+        draw.text((1240 - fw // 2, 45), floor_text, fill=BLACK_LINE, font=font_floor)
+        draw.line([(1240 - fw // 2, 105), (1240 + fw // 2, 105)], fill=BLACK_LINE, width=3)
+
     uw, uh = unit_img.size
-    scale = min(600 / uw, 600 / uh)
+    max_w, max_h = 1223, 1213
+    scale = min(max_w / uw, max_h / uh)
     new_w, new_h = int(uw * scale), int(uh * scale)
-    canvas.paste(unit_img.resize((new_w, new_h), Image.Resampling.BILINEAR), (620 - new_w // 2, 570 - new_h // 2))
+    u_resized = unit_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+    canvas.paste(u_resized, (1232 - new_w // 2, 1143 - new_h // 2))
 
-    # Key plan مصغر وخفيف
-    kp_scale = 450 / layout_pil.height
-    kp_resized = layout_pil.resize((int(layout_pil.width * kp_scale), int(layout_pil.height * kp_scale)), Image.Resampling.BILINEAR)
-    ImageDraw.Draw(kp_resized).rectangle([int(rx1 * kp_scale), int(ry1 * kp_scale), int(rx2 * kp_scale), int(ry2 * kp_scale)], outline=(217, 95, 108), width=2)
-    canvas.paste(kp_resized, (620 - kp_resized.width // 2, 1130))
+    arr_k = arr_clean.copy()
+    highlight_poly = fill_holes_cv2(comp_mask)
+    if terrace_mask is not None:
+        highlight_poly = highlight_poly | fill_holes_cv2(terrace_mask)
+    highlight_poly = dilate_cv2(highlight_poly, iterations=2)
 
-    # كتابة بيانات الفوتر بمقاسات مناسبة للقالب الجديد
-    font_main = get_font(26)
-    font_sup = get_font(18)
-    
-    draw.rectangle([590, 1650, 880, 1740], fill=WHITE_FILL)
+    ys_h, xs_h = np.where(highlight_poly)
+    hx1, hy1, hx2, hy2 = xs_h.min(), ys_h.min(), xs_h.max() + 1, ys_h.max() + 1
+    region = arr_k[hy1:hy2, hx1:hx2].astype(float)
+    sub_poly = highlight_poly[hy1:hy2, hx1:hx2]
+    not_white = ~((region[:, :, 0] > 240) & (region[:, :, 1] > 240) & (region[:, :, 2] > 240))
+    active = sub_poly & not_white
+
+    lum = (0.299 * region[:, :, 0] + 0.587 * region[:, :, 1] + 0.114 * region[:, :, 2]) / 230.0
+    lum = np.clip(lum, 0, 1.05)
+
+    region[:, :, 0] = np.where(active, np.clip(217 * lum, 0, 255), region[:, :, 0])
+    region[:, :, 1] = np.where(active, np.clip(95 * lum, 0, 255), region[:, :, 1])
+    region[:, :, 2] = np.where(active, np.clip(108 * lum, 0, 255), region[:, :, 2])
+    arr_k[hy1:hy2, hx1:hx2] = region.astype(np.uint8)
+
+    kp_crop = Image.fromarray(arr_k[int(100 * sy):int(1022 * sy), int(90 * sx):int(998 * sx)])
+    kw, kh = kp_crop.size
+    kp_scale = 931 / kh
+    kp_w, kp_h = int(kw * kp_scale), int(kh * kp_scale)
+    kp_resized = kp_crop.resize((kp_w, kp_h), Image.Resampling.LANCZOS)
+    canvas.paste(kp_resized, (1244 - kp_w // 2, 2261))
+
+    draw.rectangle([1185, 3305, 1765, 3480], fill=WHITE_FILL)
     cb = font_main.getbbox(unit_code)
-    draw.text((735 - (cb[2] - cb[0]) // 2, 1680), unit_code, fill=BLACK_LINE, font=font_main)
+    cw = cb[2] - cb[0]
+    draw.text((1474 - cw // 2, 3363), unit_code, fill=BLACK_LINE, font=font_main)
 
-    draw.rectangle([890, 1610, 1220, 1740], fill=WHITE_FILL)
-    a_str = f"{int(info['area'])}"
-    txt_main = f"Gross area = {a_str} m"
-    tb = font_main.getbbox(txt_main)
-    draw.text((1055 - (tb[2] - tb[0] + 15) // 2, 1660), txt_main, fill=BLACK_LINE, font=font_main)
-    draw.text((1055 + (tb[2] - tb[0]) // 2 - 10, 1655), "2", fill=BLACK_LINE, font=font_sup)
+    draw.rectangle([1775, 3230, 2450, 3480], fill=WHITE_FILL)
+    a_str = f"{int(area_val)}" if area_val.is_integer() else f"{area_val}"
+    s_str = f"{int(spill_val)}" if spill_val.is_integer() else f"{spill_val}"
+
+    if spill_val > 0:
+        l1 = f"Area = {a_str} m"
+        tb1 = font_main.getbbox(l1)
+        tw1 = tb1[2] - tb1[0]
+        draw.text((1821, 3285), l1, fill=BLACK_LINE, font=font_main)
+        draw.text((1821 + tw1 + 2, 3285 - 6), "2", fill=BLACK_LINE, font=font_sup)
+
+        l2 = f"Spill Out Area = {s_str} m"
+        tb2 = font_main.getbbox(l2)
+        tw2 = tb2[2] - tb2[0]
+        draw.text((1821, 3367), l2, fill=BLACK_LINE, font=font_main)
+        draw.text((1821 + tw2 + 2, 3367 - 6), "2", fill=BLACK_LINE, font=font_sup)
+    else:
+        txt_main = f"Gross area = {a_str} m"
+        tb = font_main.getbbox(txt_main)
+        tw = tb[2] - tb[0]
+        sb = font_sup.getbbox("2")
+        sw = sb[2] - sb[0]
+        start_x = 2114 - (tw + sw + 2) // 2
+        y_pos = 3325
+        draw.text((start_x, y_pos), txt_main, fill=BLACK_LINE, font=font_main)
+        draw.text((start_x + tw + 2, y_pos - 6), "2", fill=BLACK_LINE, font=font_sup)
 
     return canvas
 
-st.title("🏢 Auto Contract Sheet Generator (Ultra Safe)")
+
+def load_default_or_uploaded(uploaded_file, default_filenames):
+    """Loads an image from Streamlit uploader or falls back to repo files."""
+    if uploaded_file is not None:
+        return Image.open(uploaded_file).convert("RGB")
+    for fname in default_filenames:
+        if os.path.exists(fname):
+            return Image.open(fname).convert("RGB")
+    return None
+
+
+# -------------------------------------------------------------
+# Main Streamlit UI
+# -------------------------------------------------------------
+st.title("🏢 المولّد الأوتوماتيكي للوحات الوحدات التعاقدية (Auto Unit Sheet Generator)")
+st.markdown(
+    "ارفع **مخطط الدور (Layout)** فقط (أو استخدم المخطط المدمج)، وسيقوم البرنامج **أوتوماتيكياً** بقص الوحدة، تنظيفها، تظليل مكانها على الـ Key Plan، وكتابة الكود والمساحة بدون أي إدخال يدوي!"
+)
 
 with st.sidebar:
-    up_layout = st.file_uploader("Layout Image", type=["jpg", "png", "jpeg"])
-    up_template = st.file_uploader("Template Image", type=["jpg", "png", "jpeg"])
+    st.header("📂 1. ملفات المخطط والقالب")
+    up_layout = st.file_uploader("ارفع مخطط الدور (Layout With Areas)", type=["jpg", "jpeg", "png"])
+    up_template = st.file_uploader("اختياري: قالب اللوحة الفارغ (MAIN TEMPALTE)", type=["jpg", "jpeg", "png"])
+    floor_name = st.text_input("اسم الدور (Floor Title)", value="First Floor")
+    clean_cad_mode = st.toggle("تنظيف وتكبير رسمة الوحدة تلقائياً (Auto-Clean CAD)", value=True)
 
-if not up_layout or not up_template:
-    st.info("👈 أرجو رفع ملفات الـ Layout والـ Template من القائمة الجانبية للبدء.")
+template_img = load_default_or_uploaded(up_template, [
+    "MAIN TEMPALTE.jpg",
+    "MAIN TEMPLATE.jpg",
+    "template.jpg",
+    "user_uploaded_files/ttl=63d/user_uploaded/MAIN TEMPALTE.jpg"
+])
+layout_img = load_default_or_uploaded(up_layout, [
+    "ETAJE-AX-BX-01-FIRST FLOOR - WITH AREA.jpg",
+    "layout.jpg",
+    "user_uploaded_files/ttl=63d/user_uploaded/ETAJE-AX-BX-01-FIRST FLOOR - WITH AREA.jpg"
+])
+
+if template_img is None or layout_img is None:
+    st.info("👈 يرجى رفع ملف **مخطط الدور (Layout)** وملف **القالب (MAIN TEMPALTE)** من القائمة الجانبية للبدء (أو وضعهما في نفس مجلد `app.py` على GitHub ليعمل البرنامج بدون رفع في كل مرة).")
     st.stop()
 
-# ضغط وتجحيم الصور مباشرة عند رفعها لمنع الـ Crash نهائياً
-template_img = Image.open(up_template).convert("RGB")
-layout_pil = Image.open(up_layout).convert("RGB")
-if layout_pil.width > 1000:
-    layout_pil = layout_pil.resize((1000, int(1000 * layout_pil.height / layout_pil.width)), Image.Resampling.BILINEAR)
+_lh, _lw = layout_img.size[1], layout_img.size[0]
+if abs((_lw / _lh) - (998.0 / 1024.0)) > 0.03:
+    st.warning(
+        f"⚠️ نسبة الـ Layout ({_lw}×{_lh}) مختلفة عن المتوقع (998×1024). "
+        "لو الصورة مقصوصة، إحداثيات الوحدات مش هتطابق. ارفع صورة مخطط الدور الكاملة."
+    )
 
-selected_code = st.selectbox("اختر الكود:", list(FIRST_FLOOR_UNITS.keys()))
+arr_clean, labeled_p, labeled_b, labeled_g, all_units_mask = segment_floor_layout(np.array(layout_img))
 
-if st.button("توليد وعرض اللوحة", type="primary"):
-    sheet = generate_sheet(selected_code, template_img, layout_pil)
-    
-    st.image(sheet, caption=selected_code, use_container_width=True)
+tab_single, tab_batch = st.tabs([
+    "🎯 توليد لوحة وحدة (باختيار الكود فقط)",
+    "📦 توليد جميع وحدات الدور دفعة واحدة (Batch ZIP / PDF)"
+])
 
-    buf = io.BytesIO()
-    sheet.save(buf, format="JPEG", quality=85)
-    st.download_button("📥 تحميل اللوحة (JPG)", data=buf.getvalue(), file_name=f"{selected_code}.jpg", mime="image/jpeg")
+with tab_single:
+    col_ctrl, col_preview = st.columns([1, 2])
+    with col_ctrl:
+        st.subheader("اختر كود الوحدة")
+        all_codes = list(FIRST_FLOOR_UNITS.keys())
+        selected_code = st.selectbox("كود الوحدة (54 وحدة مسجلة تلقائياً):", all_codes, index=all_codes.index("AX-120"))
+
+        u_info = FIRST_FLOOR_UNITS[selected_code]
+        st.caption(f"**المساحة المسجلة تلقائياً:** `{u_info['area']} m²`" + (f" | **التراس:** `{u_info['spill']} m²`" if u_info['spill'] > 0 else ""))
+
+        with st.expander("تعديل يدوي اختياري (في حال الرغبة بتغيير المساحة أو رفع صورة مخصصة)"):
+            area_ov = st.number_input("تعديل المساحة (m²)", value=float(u_info["area"]), step=1.0)
+            spill_ov = st.number_input("تعديل مساحة التراس / Spill Out (m²)", value=float(u_info["spill"]), step=1.0)
+            custom_u_file = st.file_uploader("رفع رسمة منفصلة لهذه الوحدة (اختياري)", type=["jpg", "jpeg", "png"])
+            custom_u_img = Image.open(custom_u_file) if custom_u_file else None
+
+        sheet_img = None
+        try:
+            sheet_img = generate_sheet_for_unit(
+                unit_code=selected_code,
+                template_img=template_img,
+                arr_clean=arr_clean,
+                labeled_p=labeled_p,
+                labeled_b=labeled_b,
+                labeled_g=labeled_g,
+                all_units_mask=all_units_mask,
+                floor_text=floor_name,
+                area_override=area_ov,
+                spill_override=spill_ov,
+                clean_cad_mode=clean_cad_mode,
+                custom_unit_img=custom_u_img
+            )
+        except Exception as e:
+            st.error(f"تعذّر توليد اللوحة: {e}")
+
+        if sheet_img is not None:
+            buf_jpg = io.BytesIO()
+            sheet_img.save(buf_jpg, format="JPEG", quality=95)
+            st.download_button(
+                label=f"📥 تحميل لوحة {selected_code} (JPG)",
+                data=buf_jpg.getvalue(),
+                file_name=f"{selected_code}.jpg",
+                mime="image/jpeg",
+                width="stretch",
+                type="primary"
+            )
+
+            buf_pdf = io.BytesIO()
+            sheet_img.save(buf_pdf, format="PDF", resolution=300.0)
+            st.download_button(
+                label=f"📄 تحميل لوحة {selected_code} جاهزة للطباعة (PDF)",
+                data=buf_pdf.getvalue(),
+                file_name=f"{selected_code}.pdf",
+                mime="application/pdf",
+                width="stretch"
+            )
+
+    with col_preview:
+        if sheet_img is not None:
+            st.image(sheet_img, caption=f"معاينة اللوحة التعاقدية - {selected_code}", width="stretch")
+
+with tab_batch:
+    st.subheader("توليد مجموعة وحدات أو الدور بالكامل بضغطة زر")
+    selected_batch = st.multiselect(
+        "اختر الوحدات المطلوب استخراج لوحاتها (أو اتركها كما هي لتوليد القائمة المختارة):",
+        options=list(FIRST_FLOOR_UNITS.keys()),
+        default=["AX-101", "AX-102", "AX-103", "AX-104", "AX-120", "BX-107"]
+    )
+    select_all = st.checkbox("تحديد كل وحدات الدور بالكامل (54 وحدة)")
+    if select_all:
+        selected_batch = list(FIRST_FLOOR_UNITS.keys())
+
+    if st.button(f"🚀 توليد وحزم {len(selected_batch)} لوحة الآن", type="primary", disabled=(len(selected_batch) == 0)):
+        progress = st.progress(0, text="جاري توليد اللوحات أوتوماتيكياً...")
+        zip_buf = io.BytesIO()
+        jpg_pages = []   # JPEG bytes only (small) instead of full-size images in RAM
+        failed = []
+
+        with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for idx, code in enumerate(selected_batch):
+                progress.progress((idx + 1) / len(selected_batch), text=f"جاري تجهيز لوحة {code} ({idx + 1}/{len(selected_batch)})...")
+                try:
+                    s_im = generate_sheet_for_unit(
+                        unit_code=code,
+                        template_img=template_img,
+                        arr_clean=arr_clean,
+                        labeled_p=labeled_p,
+                        labeled_b=labeled_b,
+                        labeled_g=labeled_g,
+                        all_units_mask=all_units_mask,
+                        floor_text=floor_name,
+                        clean_cad_mode=clean_cad_mode
+                    )
+                except Exception as e:
+                    failed.append((code, str(e)))
+                    continue
+                img_bytes = io.BytesIO()
+                s_im.save(img_bytes, format="JPEG", quality=95)
+                jpg = img_bytes.getvalue()
+                zf.writestr(f"{code}.jpg", jpg)
+                jpg_pages.append(jpg)
+                del s_im
+
+        progress.empty()
+
+        pdf_bytes = None
+        if jpg_pages:
+            def _page_iter():
+                for b in jpg_pages[1:]:
+                    yield Image.open(io.BytesIO(b)).convert("RGB")
+
+            first = Image.open(io.BytesIO(jpg_pages[0])).convert("RGB")
+            pdf_all_buf = io.BytesIO()
+            first.save(
+                pdf_all_buf,
+                format="PDF",
+                resolution=300.0,
+                save_all=True,
+                append_images=_page_iter()
+            )
+            pdf_bytes = pdf_all_buf.getvalue()
+
+        # keep results in session_state so they survive the rerun caused by download buttons
+        st.session_state["batch_result"] = {
+            "zip": zip_buf.getvalue() if jpg_pages else None,
+            "pdf": pdf_bytes,
+            "count": len(jpg_pages),
+            "failed": failed,
+            "floor": floor_name.replace(" ", "_"),
+        }
+
+    res = st.session_state.get("batch_result")
+    if res:
+        if res["count"] > 0:
+            st.success(f"تم توليد {res['count']} لوحة بنجاح!")
+        for code, err in res["failed"]:
+            st.error(f"فشل توليد {code}: {err}")
+
+        if res["count"] > 0:
+            c1, c2 = st.columns(2)
+            c1.download_button(
+                label=f"📦 تحميل جميع اللوحات كملف مضغوط ({res['count']} صورة JPG في ZIP)",
+                data=res["zip"],
+                file_name=f"{res['floor']}_Unit_Sheets.zip",
+                mime="application/zip",
+                width="stretch",
+                type="primary"
+            )
+            c2.download_button(
+                label=f"📕 تحميل كتاب موحد بجميع اللوحات ({res['count']} صفحة PDF)",
+                data=res["pdf"],
+                file_name=f"{res['floor']}_All_Units.pdf",
+                mime="application/pdf",
+                width="stretch"
+            )
