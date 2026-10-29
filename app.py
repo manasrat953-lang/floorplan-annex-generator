@@ -15,69 +15,67 @@ st.set_page_config(
 # -------------------------------------------------------------
 # Constant Colors & Styling
 # -------------------------------------------------------------
-PURPLE_FILL = (216, 190, 215)
-BLUE_FILL = (203, 230, 251)
 BLACK_LINE = (0, 0, 0)
 WHITE_FILL = (255, 255, 255)
 
 # -------------------------------------------------------------
-# Complete Database of First-Floor Units (Optimized Coordinates)
+# Complete Database of First-Floor Units (Direct Coordinate Mapping)
 # -------------------------------------------------------------
 FIRST_FLOOR_UNITS = {
-    "AX-101": {"area": 103, "spill": 0,  "type": "purple", "center": (905, 931)},
-    "AX-102": {"area": 52,  "spill": 0,  "type": "purple", "center": (825, 931)},
-    "AX-103": {"area": 52,  "spill": 0,  "type": "purple", "center": (774, 931)},
-    "AX-104": {"area": 103, "spill": 0,  "type": "purple", "center": (693, 931)},
-    "AX-105": {"area": 38,  "spill": 0,  "type": "purple", "center": (679, 851)},
-    "AX-106": {"area": 38,  "spill": 0,  "type": "purple", "center": (679, 799)},
-    "AX-107": {"area": 38,  "spill": 0,  "type": "purple", "center": (679, 746)},
-    "AX-108": {"area": 38,  "spill": 0,  "type": "purple", "center": (679, 693)},
-    "AX-109": {"area": 39,  "spill": 0,  "type": "purple", "center": (679, 640)},
-    "AX-110": {"area": 52,  "spill": 0,  "type": "purple", "center": (667, 588)},
-    "AX-111": {"area": 102, "spill": 0,  "type": "purple", "center": (710, 525)},
-    "AX-112": {"area": 103, "spill": 0,  "type": "purple", "center": (684, 462)},
-    "AX-113": {"area": 103, "spill": 0,  "type": "purple", "center": (635, 412)},
-    "AX-114": {"area": 104, "spill": 0,  "type": "purple", "center": (571, 386)},
-    "AX-115": {"area": 51,  "spill": 0,  "type": "purple", "center": (509, 430)},
-    "AX-116": {"area": 39,  "spill": 0,  "type": "purple", "center": (456, 418)},
-    "AX-117": {"area": 39,  "spill": 0,  "type": "purple", "center": (403, 418)},
-    "AX-118": {"area": 39,  "spill": 0,  "type": "purple", "center": (351, 418)},
-    "AX-119": {"area": 39,  "spill": 0,  "type": "purple", "center": (298, 418)},
-    "AX-120": {"area": 39,  "spill": 0,  "type": "purple", "center": (245, 418)},
-    "AX-121": {"area": 121, "spill": 0,  "type": "purple", "center": (159, 404)},
-    "AX-122": {"area": 61,  "spill": 0,  "type": "purple", "center": (159, 324)},
-    "AX-123": {"area": 61,  "spill": 0,  "type": "purple", "center": (159, 272)},
-    "AX-124": {"area": 121, "spill": 0,  "type": "purple", "center": (159, 191)},
-    "AX-125": {"area": 38,  "spill": 0,  "type": "purple", "center": (245, 177)},
-    "AX-126": {"area": 38,  "spill": 0,  "type": "purple", "center": (298, 178)},
-    "AX-127": {"area": 38,  "spill": 0,  "type": "purple", "center": (351, 177)},
-    "AX-128": {"area": 38,  "spill": 0,  "type": "purple", "center": (403, 178)},
-    "AX-129": {"area": 38,  "spill": 0,  "type": "purple", "center": (456, 177)},
-    "AX-130": {"area": 38,  "spill": 0,  "type": "purple", "center": (509, 177)},
-    "AX-131": {"area": 91,  "spill": 0,  "type": "purple", "center": (571, 207)},
-    "AX-132": {"area": 92,  "spill": 0,  "type": "purple", "center": (638, 221)},
-    "AX-133": {"area": 92,  "spill": 0,  "type": "purple", "center": (703, 248)},
-    "AX-134": {"area": 92,  "spill": 0,  "type": "purple", "center": (760, 287)},
-    "AX-135": {"area": 92,  "spill": 0,  "type": "purple", "center": (810, 336)},
-    "AX-136": {"area": 92,  "spill": 0,  "type": "purple", "center": (848, 394)},
-    "AX-137": {"area": 92,  "spill": 0,  "type": "purple", "center": (875, 458)},
-    "AX-138": {"area": 91,  "spill": 0,  "type": "purple", "center": (889, 525)},
-    "AX-139": {"area": 38,  "spill": 0,  "type": "purple", "center": (920, 588)},
-    "AX-140": {"area": 38,  "spill": 0,  "type": "purple", "center": (919, 640)},
-    "AX-141": {"area": 38,  "spill": 0,  "type": "purple", "center": (919, 693)},
-    "AX-142": {"area": 38,  "spill": 0,  "type": "purple", "center": (919, 746)},
-    "AX-143": {"area": 38,  "spill": 0,  "type": "purple", "center": (919, 799)},
-    "AX-144": {"area": 38,  "spill": 0,  "type": "purple", "center": (919, 851)},
-    "BX-101": {"area": 74,  "spill": 0,  "type": "blue",   "center": (374, 599)},
-    "BX-102": {"area": 83,  "spill": 0,  "type": "blue",   "center": (271, 586)},
-    "BX-103": {"area": 42,  "spill": 0,  "type": "blue",   "center": (256, 640)},
-    "BX-104": {"area": 42,  "spill": 0,  "type": "blue",   "center": (256, 693)},
-    "BX-105": {"area": 42,  "spill": 0,  "type": "blue",   "center": (256, 746)},
-    "BX-106": {"area": 42,  "spill": 0,  "type": "blue",   "center": (256, 799)},
-    "BX-107": {"area": 74,  "spill": 20, "type": "blue",   "center": (259, 875)},
-    "BX-108": {"area": 71,  "spill": 24, "type": "blue",   "center": (363, 905)},
-    "BX-109": {"area": 54,  "spill": 0,  "type": "blue",   "center": (380, 852)},
-    "BX-110": {"area": 55,  "spill": 0,  "type": "blue",   "center": (381, 798)},
+    "AX-101": {"area": 103, "spill": 0,  "type": "purple", "box": (860, 880, 950, 980)},
+    "AX-102": {"area": 52,  "spill": 0,  "type": "purple", "box": (790, 880, 860, 980)},
+    "AX-103": {"area": 52,  "spill": 0,  "type": "purple", "box": (730, 880, 800, 980)},
+    "AX-104": {"area": 103, "spill": 0,  "type": "purple", "box": (650, 880, 730, 980)},
+    "AX-105": {"area": 38,  "spill": 0,  "type": "purple", "box": (630, 810, 720, 890)},
+    "AX-106": {"area": 38,  "spill": 0,  "type": "purple", "box": (630, 760, 720, 835)},
+    "AX-107": {"area": 38,  "spill": 0,  "type": "purple", "box": (630, 700, 720, 780)},
+    "AX-108": {"area": 38,  "spill": 0,  "type": "purple", "box": (630, 650, 720, 725)},
+    "AX-109": {"area": 39,  "spill": 0,  "type": "purple", "box": (630, 595, 720, 670)},
+    "AX-110": {"area": 52,  "spill": 0,  "type": "purple", "box": (620, 545, 710, 620)},
+    "AX-111": {"area": 102, "spill": 0,  "type": "purple", "box": (660, 480, 755, 565)},
+    "AX-112": {"area": 103, "spill": 0,  "type": "purple", "box": (635, 415, 730, 500)},
+    "AX-113": {"area": 103, "spill": 0,  "type": "purple", "box": (585, 365, 680, 455)},
+    "AX-114": {"area": 104, "spill": 0,  "type": "purple", "box": (520, 335, 620, 425)},
+    "AX-115": {"area": 51,  "spill": 0,  "type": "purple", "box": (465, 385, 545, 470)},
+    "AX-116": {"area": 39,  "spill": 0,  "type": "purple", "box": (410, 375, 495, 455)},
+    "AX-117": {"area": 39,  "spill": 0,  "type": "purple", "box": (360, 375, 445, 440)},
+    "AX-118": {"area": 39,  "spill": 0,  "type": "purple", "box": (310, 375, 395, 435)},
+    "AX-119": {"area": 39,  "spill": 0,  "type": "purple", "box": (260, 375, 345, 435)},
+    "AX-120": {"area": 39,  "spill": 0,  "type": "purple", "box": (210, 375, 290, 435)},
+    "AX-121": {"area": 121, "spill": 0,  "type": "purple", "box": (115, 355, 205, 445)},
+    "AX-122": {"area": 61,  "spill": 0,  "type": "purple", "box": (115, 280, 205, 360)},
+    "AX-123": {"area": 61,  "spill": 0,  "type": "purple", "box": (115, 230, 205, 305)},
+    "AX-124": {"area": 121, "spill": 0,  "type": "purple", "box": (115, 145, 205, 235)},
+    "AX-125": {"area": 38,  "spill": 0,  "type": "purple", "box": (210, 130, 285, 200)},
+    "AX-126": {"area": 38,  "spill": 0,  "type": "purple", "box": (260, 130, 340, 200)},
+    "AX-127": {"area": 38,  "spill": 0,  "type": "purple", "box": (310, 130, 395, 200)},
+    "AX-128": {"area": 38,  "spill": 0,  "type": "purple", "box": (360, 130, 445, 200)},
+    "AX-129": {"area": 38,  "spill": 0,  "type": "purple", "box": (410, 130, 495, 200)},
+    "AX-130": {"area": 38,  "spill": 0,  "type": "purple", "box": (465, 130, 545, 200)},
+    "AX-131": {"area": 91,  "spill": 0,  "type": "purple", "box": (520, 160, 615, 250)},
+    "AX-132": {"area": 92,  "spill": 0,  "type": "purple", "box": (585, 175, 685, 270)},
+    "AX-133": {"area": 92,  "spill": 0,  "type": "purple", "box": (650, 200, 750, 295)},
+    "AX-134": {"area": 92,  "spill": 0,  "type": "purple", "box": (710, 240, 805, 330)},
+    "AX-135": {"area": 92,  "spill": 0,  "type": "purple", "box": (760, 290, 860, 380)},
+    "AX-136": {"area": 92,  "spill": 0,  "type": "purple", "box": (800, 345, 890, 435)},
+    "AX-137": {"area": 92,  "spill": 0,  "type": "purple", "box": (830, 410, 915, 500)},
+    "AX-138": {"area": 91,  "spill": 0,  "type": "purple", "box": (840, 475, 935, 565)},
+    "AX-139": {"area": 38,  "spill": 0,  "type": "purple", "box": (875, 540, 955, 615)},
+    "AX-140": {"area": 38,  "spill": 0,  "type": "purple", "box": (875, 595, 955, 670)},
+    "AX-141": {"area": 38,  "spill": 0,  "type": "purple", "box": (875, 650, 955, 725)},
+    "AX-142": {"area": 38,  "spill": 0,  "type": "purple", "box": (875, 700, 955, 780)},
+    "AX-143": {"area": 38,  "spill": 0,  "type": "purple", "box": (875, 760, 955, 835)},
+    "AX-144": {"area": 38,  "spill": 0,  "type": "purple", "box": (875, 810, 955, 890)},
+    "BX-101": {"area": 74,  "spill": 0,  "type": "blue",   "box": (330, 555, 460, 630)},
+    "BX-102": {"area": 83,  "spill": 0,  "type": "blue",   "box": (225, 540, 340, 620)},
+    "BX-103": {"area": 42,  "spill": 0,  "type": "blue",   "box": (210, 595, 300, 675)},
+    "BX-104": {"area": 42,  "spill": 0,  "type": "blue",   "box": (210, 650, 300, 725)},
+    "BX-105": {"area": 42,  "spill": 0,  "type": "blue",   "box": (210, 700, 300, 780)},
+    "BX-106": {"area": 42,  "spill": 0,  "type": "blue",   "box": (210, 755, 300, 835)},
+    "BX-107": {"area": 74,  "spill": 20, "type": "blue",   "box": (210, 835, 305, 985)},
+    "BX-108": {"area": 71,  "spill": 24, "type": "blue",   "box": (310, 860, 400, 985)},
+    "BX-109": {"area": 54,  "spill": 0,  "type": "blue",   "box": (335, 800, 425, 885)},
+    "BX-110": {"area": 55,  "spill": 0,  "type": "blue",   "box": (335, 750, 425, 830)},
 }
 
 
@@ -94,29 +92,10 @@ def get_system_font(size):
     return ImageFont.load_default()
 
 
-@st.cache_data
-def prepare_layout_arrays(layout_bytes):
-    """تصغير وتجهيز مصفوفات الصورة بحجم خفيف جداً يمنع استهلاك الـ RAM ويقضي على الـ Oh No"""
-    pil_img = Image.open(io.BytesIO(layout_bytes)).convert("RGB")
-    # تصغير اللوحة مقدماً لحماية الذاكرة (Memory Safe)
-    pil_img = pil_img.resize((1200, 1230), Image.Resampling.BILINEAR)
-    arr = np.array(pil_img)
-
-    purple_mask = (arr[:, :, 0] > 180) & (arr[:, :, 1] < 210) & (arr[:, :, 2] > 180)
-    blue_mask = (arr[:, :, 0] < 220) & (arr[:, :, 1] > 200) & (arr[:, :, 2] > 230)
-
-    _, labeled_p = cv2.connectedComponents(purple_mask.astype(np.uint8))
-    _, labeled_b = cv2.connectedComponents(blue_mask.astype(np.uint8))
-
-    return arr, labeled_p, labeled_b
-
-
 def generate_sheet_for_unit(
     unit_code: str,
     template_img: Image.Image,
-    arr_clean: np.ndarray,
-    labeled_p: np.ndarray,
-    labeled_b: np.ndarray,
+    layout_pil: Image.Image,
     floor_text: str = "First Floor",
     area_override: float = None,
     spill_override: float = None,
@@ -126,36 +105,24 @@ def generate_sheet_for_unit(
     area_val = float(area_override) if area_override is not None else float(info["area"])
     spill_val = float(spill_override) if spill_override is not None else float(info["spill"])
 
-    lbl_arr = labeled_p if info["type"] == "purple" else labeled_b
-    cx, cy = info["center"]
-
-    # البحث عن الكتل البيكسلية بدقة خفيفة
-    r = 20
-    win = lbl_arr[max(0, cy - r):min(lbl_arr.shape[0], cy + r + 1), max(0, cx - r):min(lbl_arr.shape[1], cx + r + 1)]
-    vals = win[win > 0]
-    comp_id = int(np.bincount(vals).argmax()) if len(vals) > 0 else 0
-    comp_mask = (lbl_arr == comp_id) if comp_id > 0 else np.zeros_like(lbl_arr, dtype=bool)
+    lw, lh = layout_pil.size
+    bx1, by1, bx2, by2 = info["box"]
+    # تحويل الإحداثيات النسبية (من 1000) إلى مقاس الصورة الفعلي بدقة خفيفة جداً
+    rx1 = int((bx1 / 1000.0) * lw)
+    ry1 = int((by1 / 1000.0) * lh)
+    rx2 = int((bx2 / 1000.0) * lw)
+    ry2 = int((by2 / 1000.0) * lh)
 
     if custom_unit_img is not None:
         unit_img = custom_unit_img.convert("RGB")
     else:
-        ys, xs = np.where(comp_mask)
-        if len(ys) > 0:
-            x1, y1 = max(0, xs.min() - 8), max(0, ys.min() - 8)
-            x2, y2 = min(arr_clean.shape[1], xs.max() + 8), min(arr_clean.shape[0], ys.max() + 8)
-            crop = arr_clean[y1:y2, x1:x2].copy()
-            crop[~comp_mask[y1:y2, x1:x2]] = [255, 255, 255]
-        else:
-            crop = np.full((300, 300, 3), 255, dtype=np.uint8)
-
-        # تكبير ناعم وسريع للوحة الوحدة
-        h_s, w_s = crop.shape[:2]
-        up = cv2.resize(crop, (int(w_s * 3), int(h_s * 3)), interpolation=cv2.INTER_LINEAR)
-        unit_img = Image.fromarray(up)
+        # قص مباشر بدون عناء وتكبير ناعم وسريع
+        crop = layout_pil.crop((rx1, ry1, rx2, ry2))
+        unit_img = crop.resize((crop.width * 3, crop.height * 3), Image.Resampling.BILINEAR)
         draw_u = ImageDraw.Draw(unit_img)
-        f_u = get_system_font(30)
+        f_u = get_system_font(28)
         ub = f_u.getbbox(unit_code)
-        draw_u.text(((w_s * 3) // 2 - (ub[2] - ub[0]) // 2, (h_s * 3) // 2 - (ub[3] - ub[1]) // 2), unit_code, fill=BLACK_LINE, font=f_u)
+        draw_u.text((unit_img.width // 2 - (ub[2] - ub[0]) // 2, unit_img.height // 2 - (ub[3] - ub[1]) // 2), unit_code, fill=BLACK_LINE, font=f_u)
 
     canvas = template_img.copy().convert("RGB")
     draw = ImageDraw.Draw(canvas)
@@ -169,26 +136,27 @@ def generate_sheet_for_unit(
         fw = fb[2] - fb[0]
         draw.text((1240 - fw // 2, 45), floor_text, fill=BLACK_LINE, font=font_floor)
 
-    # لصق رسمة الوحدة
+    # لصق رسمة الوحدة في المكان المخصص
     uw, uh = unit_img.size
     scale = min(1223 / uw, 1213 / uh)
     new_w, new_h = int(uw * scale), int(uh * scale)
     u_resized = unit_img.resize((new_w, new_h), Image.Resampling.BILINEAR)
     canvas.paste(u_resized, (1232 - new_w // 2, 1143 - new_h // 2))
 
-    # لصق Key Plan مع تظليل أحمر خفيف
-    arr_k = arr_clean.copy()
-    ys_h, xs_h = np.where(comp_mask)
-    if len(ys_h) > 0:
-        cv2.rectangle(arr_k, (xs_h.min() - 2, ys_h.min() - 2), (xs_h.max() + 2, ys_h.max() + 2), (217, 95, 108), 4)
+    # Key Plan خفيف جداً بدون مصفوفات معقدة
+    kp_scale = 931 / layout_pil.height
+    kp_w, kp_h = int(layout_pil.width * kp_scale), int(layout_pil.height * kp_scale)
+    kp_resized = layout_pil.resize((kp_w, kp_h), Image.Resampling.BILINEAR)
+    
+    # رسم إطار أحمر خفيف مباشر على الـ Key Plan
+    draw_kp = ImageDraw.Draw(kp_resized)
+    draw_kp.rectangle(
+        [int(rx1 * kp_scale), int(ry1 * kp_scale), int(rx2 * kp_scale), int(ry2 * kp_scale)],
+        outline=(217, 95, 108), width=4
+    )
+    canvas.paste(kp_resized, (1244 - kp_w // 2, 2261))
 
-    kp_crop = Image.fromarray(arr_k)
-    kw, kh = kp_crop.size
-    kp_scale = 931 / kh
-    kp_resized = kp_crop.resize((int(kw * kp_scale), int(kh * kp_scale)), Image.Resampling.BILINEAR)
-    canvas.paste(kp_resized, (1244 - kp_resized.width // 2, 2261))
-
-    # كتابة بيانات الكود والمساحة في الفوتر بدقة
+    # كتابة الفوتر والمساحات
     draw.rectangle([1185, 3305, 1765, 3480], fill=WHITE_FILL)
     cb = font_main.getbbox(unit_code)
     draw.text((1474 - (cb[2] - cb[0]) // 2, 3363), unit_code, fill=BLACK_LINE, font=font_main)
@@ -236,7 +204,10 @@ if template_bytes is None or layout_bytes is None:
     st.stop()
 
 template_img = Image.open(io.BytesIO(template_bytes)).convert("RGB")
-arr_clean, labeled_p, labeled_b = prepare_layout_arrays(layout_bytes)
+# قراءة الصورة بمقاس متوازن تماماً يمنع الـ Crash نهائياً
+layout_pil = Image.open(io.BytesIO(layout_bytes)).convert("RGB")
+if layout_pil.width > 2000:
+    layout_pil = layout_pil.resize((2000, int(2000 * layout_pil.height / layout_pil.width)), Image.Resampling.BILINEAR)
 
 tab_single, tab_batch = st.tabs(["🎯 توليد وحدة منفردة", "📦 توليد دفعة واحدة (ZIP)"])
 
@@ -254,9 +225,7 @@ with tab_single:
         sheet_img = generate_sheet_for_unit(
             unit_code=selected_code,
             template_img=template_img,
-            arr_clean=arr_clean,
-            labeled_p=labeled_p,
-            labeled_b=labeled_b,
+            layout_pil=layout_pil,
             floor_text=floor_name,
             area_override=area_ov,
             spill_override=spill_ov
@@ -285,9 +254,7 @@ with tab_batch:
                 s_im = generate_sheet_for_unit(
                     unit_code=code,
                     template_img=template_img,
-                    arr_clean=arr_clean,
-                    labeled_p=labeled_p,
-                    labeled_b=labeled_b,
+                    layout_pil=layout_pil,
                     floor_text=floor_name
                 )
                 img_bytes = io.BytesIO()
