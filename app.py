@@ -11,7 +11,6 @@ st.set_page_config(
 BLACK_LINE = (0, 0, 0)
 WHITE_FILL = (255, 255, 255)
 
-# قاعدة بيانات الوحدات بإحداثيات قص هندسي مباشر خفيف جداً على الـ RAM
 FIRST_FLOOR_UNITS = {
     "AX-101": {"area": 103, "box": (860, 880, 950, 980)},
     "AX-102": {"area": 52,  "box": (790, 880, 860, 980)},
@@ -70,12 +69,10 @@ FIRST_FLOOR_UNITS = {
 }
 
 def get_font(size):
-    for path in ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "arial.ttf"]:
-        try:
-            return ImageFont.truetype(path, size)
-        except Exception:
-            continue
-    return ImageFont.load_default()
+    try:
+        return ImageFont.truetype("arial.ttf", size)
+    except Exception:
+        return ImageFont.load_default()
 
 def generate_sheet(unit_code, template_img, layout_pil):
     info = FIRST_FLOOR_UNITS[unit_code]
@@ -88,7 +85,6 @@ def generate_sheet(unit_code, template_img, layout_pil):
     crop = layout_pil.crop((rx1, ry1, rx2, ry2))
     unit_img = crop.resize((crop.width * 2, crop.height * 2), Image.Resampling.BILINEAR)
     
-    # مقاس آمن جداً ومناسب للطباعة والتعاقد (1240x1754) بدون أي استهلاك للرّامات
     canvas = template_img.resize((1240, 1754), Image.Resampling.BILINEAR).convert("RGB")
     draw = ImageDraw.Draw(canvas)
     
@@ -118,7 +114,7 @@ def generate_sheet(unit_code, template_img, layout_pil):
 
     return canvas
 
-st.title("🏢 Auto Contract Sheet Generator (Zero-Crash Mode)")
+st.title("🏢 Auto Contract Sheet Generator")
 
 with st.sidebar:
     up_layout = st.file_uploader("Layout Image", type=["jpg", "png", "jpeg"])
@@ -128,7 +124,6 @@ if not up_layout or not up_template:
     st.info("👈 أرجو رفع ملفات الـ Layout والـ Template من القائمة الجانبية للبدء.")
     st.stop()
 
-# ضغط الصورة فور رفعها لحماية السيرفر من الكراش
 template_img = Image.open(up_template).convert("RGB")
 layout_pil = Image.open(up_layout).convert("RGB")
 if layout_pil.width > 800:
@@ -136,15 +131,13 @@ if layout_pil.width > 800:
 
 selected_code = st.selectbox("اختر الكود:", list(FIRST_FLOOR_UNITS.keys()))
 
-if st.button("توليد اللوحة برابط مباشر", type="primary"):
+if st.button("توليد اللوحة", type="primary"):
     sheet = generate_sheet(selected_code, template_img, layout_pil)
     
-    st.success("تم توليد اللوحة بنجاح وبدون أي استهلاك للذاكرة!")
-
     buf = io.BytesIO()
     sheet.save(buf, format="JPEG", quality=85)
     st.download_button(
-        label=f"📥 اضغط هنا لتحميل لوحة {selected_code} (JPG)",
+        label=f"📥 تحميل لوحة {selected_code} (JPG)",
         data=buf.getvalue(),
         file_name=f"{selected_code}.jpg",
         mime="image/jpeg",
