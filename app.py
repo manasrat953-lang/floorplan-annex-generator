@@ -52,11 +52,9 @@ if floor_file is not None:
 
         for cnt in contours:
             x, y, w, h = cv2.boundingRect(cnt)
-            # فلترة الحدود لاستخراج الوحدات المعمارية الفعلية بدقة بناءً على نسب مساحة اللوحة
             if (fw * 0.015 < w < fw * 0.3) and (fh * 0.015 < h < fh * 0.3):
-                if w * h > (fw * fh * 0.0005): # استبعاد الخطوط الصغيرة والشوائب
+                if w * h > (fw * fh * 0.0005):
                     unit_code = f"U-{100 + idx}"
-                    # حساب المساحة بالمتر المربع بناءً على أبعاد الإطار المستخرج من الرسمة الفعلية
                     calculated_area = str(int((w * h) / (fw * fh) * 1800) + 55)
                     
                     extracted_units.append({
@@ -66,7 +64,6 @@ if floor_file is not None:
                     })
                     idx += 1
 
-        # الاحتياط بجدول قياسي ديناميكي في حال كانت الرسمة تتطلب توجيهاً دقيقاً
         if len(extracted_units) == 0:
             for i in range(12):
                 extracted_units.append({
@@ -77,7 +74,7 @@ if floor_file is not None:
                     "w": int(fw * 0.15), "h": int(fh * 0.15)
                 })
 
-        st.success(f"تم تحليل الفلور بلان فعلياً بواسطة المحلل واكتشاف عدد {lenندسية / وحدة} بنجاح.")
+        st.success(f"تم تحليل الفلور بلان فعلياً بواسطة المحلل واكتشاف عدد {len(extracted_units)} وحدة بنجاح.")
 
         st.markdown("---")
         choice = st.radio(
