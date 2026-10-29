@@ -44,7 +44,6 @@ if floor_file is not None:
         blur = cv2.GaussianBlur(gray, (5, 5), 0)
         _, thresh = cv2.threshold(blur, 210, 255, cv2.THRESH_BINARY_INV)
         
-        # إغلاق الفراغات الصغيرة لتوحيد كتلة الوحدة المعمارية بالكامل
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
         closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=2)
         
@@ -55,8 +54,6 @@ if floor_file is not None:
             x, y, w, h = cv2.boundingRect(cnt)
             area = w * h
             
-            # فلاتر مساحة وأبعاد صارمة جداً لتقع فقط على مساحات الوحدات المعمارية الفعلية
-            # منع أي تفاصيل صغيرة أو أعمدة أو مساحات خدمات ضخمة من الدخول
             min_w = fw * 0.035
             max_w = fw * 0.18
             min_h = fh * 0.035
@@ -66,7 +63,6 @@ if floor_file is not None:
                 if (fw * fh * 0.0015) < area < (fw * fh * 0.03):
                     valid_boxes.append({"x": x, "y": y, "w": w, "h": h})
 
-        # تنظيف المربعات المكررة والمتداخلة تماماً
         filtered_boxes = []
         for b1 in valid_boxes:
             is_overlap = False
@@ -77,7 +73,6 @@ if floor_file is not None:
             if not is_overlap:
                 filtered_boxes.append(b1)
 
-        # ترتيب الوحدات جغرافياً
         filtered_boxes = sorted(filtered_boxes, key=lambda b: (b['y'] // 80, b['x']))
 
         extracted_units = []
@@ -184,7 +179,7 @@ if floor_file is not None:
                     st.success(f"تم توليد ملحق الوحدة {selected_code} بنجاح!")
                     st.image(img_buf, caption=f"Annex {selected_code}", use_container_width=True)
                     st.download_button(
-                        label=f5"تحميل صورة Annex_{selected_code}.jpg",
+                        label=f"تحميل صورة Annex_{selected_code}.jpg",
                         data=img_buf.getvalue(),
                         file_name=f"Annex_{selected_code}.jpg",
                         mime="image/jpeg"
